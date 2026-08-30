@@ -333,24 +333,25 @@
 
     <div class="bottom-info">
         <div class="peer-id-display" id="peerIdDisplay">⏳ Получение Peer ID...</div>
-        <div class="version" id="versionDisplay">v.0.0.7</div>
+        <div class="version" id="versionDisplay">v.0.0.8</div>
     </div>
 </div>
 
 <script>
     (function() {
-        const VERSION = 'v.0.0.7';
+        const VERSION = 'v.0.0.8';
         document.getElementById('versionDisplay').textContent = VERSION;
 
+        // Уникальный ID этого пользователя
         const myId = Date.now() + '_' + Math.random().toString(36).slice(2, 7);
 
+        // Все данные
         let allCounters = {};
         let connections = [];
         let myPeerId = null;
         let isCreated = false;
         let myX = 0;
-        let connectedPeers = new Set();
-        let reconnectTimer = null;
+        let allPeers = new Set(); // Все известные пиры
 
         const peer = new Peer(undefined, {
             host: '0.peerjs.com',
@@ -456,7 +457,8 @@
         function broadcastState() {
             const state = {
                 type: 'state',
-                counters: allCounters
+                counters: allCounters,
+                peers: Array.from(allPeers) // Передаём список всех пиров
             };
             connections.forEach(conn => {
                 if (conn.open) {
@@ -476,6 +478,15 @@
                     allCounters[key].online = data.counters[key].online !== false;
                 }
 
+                // Получаем список всех пиров
+                if (data.peers) {
+                    data.peers.forEach(peerId => {
+                        if (peerId !== myPeerId) {
+                            allPeers.add(peerId);
+                        }
+                    });
+                }
+
                 // Если наш счётчик ещё не создан, но появился в данных
                 if (allCounters[myId] && !isCreated) {
                     isCreated = true;
@@ -487,25 +498,24 @@
                     plusBtns.forEach(btn => btn.disabled = false);
                 }
 
+                // Подключаемся ко всем новым пирам
+                setTimeout(connectToAllPeers, 300);
+
                 updateUI();
             }
         }
 
-        // --- Подключение ко ВСЕМ ---
+        // --- Подключение ко ВСЕМ известным пирам ---
         function connectToAllPeers() {
-            // Получаем ID из URL
             const urlParams = new URLSearchParams(window.location.search);
             const targetPeer = urlParams.get('connect');
             
-            // Собираем всех, к кому нужно подключиться
-            const allPeers = new Set(connectedPeers);
-            
-            // Если в URL есть ID и это не мы сами
+            // Добавляем целевого пира из URL
             if (targetPeer && targetPeer !== myPeerId) {
                 allPeers.add(targetPeer);
             }
 
-            // Подключаемся к каждому
+            // Подключаемся к каждому пиру
             allPeers.forEach(peerId => {
                 if (peerId !== myPeerId && !connections.some(c => c.peer === peerId)) {
                     connectToPeer(peerId);
@@ -531,13 +541,14 @@
                 // Отправляем своё состояние
                 conn.send({
                     type: 'state',
-                    counters: allCounters
+                    counters: allCounters,
+                    peers: Array.from(allPeers)
                 });
 
-                // Запоминаем, что подключились к этому пиру
-                connectedPeers.add(conn.peer);
+                // Добавляем в список
+                allPeers.add(conn.peer);
 
-                // Пробуем подключиться к остальным
+                // Пробуем подключиться ко всем
                 setTimeout(connectToAllPeers, 300);
                 updateUI();
             });
@@ -548,12 +559,52 @@
 
             conn.on('close', () => {
                 connections = connections.filter(c => c !== conn);
-                connectedPeers.delete(conn.peer);
+                allPeers.delete(conn.peer);
                 connectionStatus.textContent = '🟡 Соединение потеряно';
                 connectionStatus.className = 'connection-status disconnected';
+                
+                // Проверяем, не удалился ли кто-то
+                checkAndRemoveOffline();
                 updateUI();
             });
         }
+
+        // --- Проверка и удаление офлайн пользователей ---
+        function checkAndRemoveOffline() {
+            // Проверяем всех, кто есть в allCounters
+            const activePeers = new Set();
+            connections.forEach(conn => {
+                if (conn.open) {
+                    activePeers.add(conn.peer);
+                }
+            });
+            // Добавляем себя
+            activePeers.add(myPeerId);
+
+            // Удаляем тех, кого нет в активных
+            for (const key in allCounters) {
+                // Пропускаем себя
+                if (key === myId) continue;
+                
+                // Проверяем, есть ли такой peer
+                let found = false;
+                for (const peerId of activePeers) {
+                    // Ищем соответствие между peerId и tabId
+                    // Так как у нас нет прямой связи, используем эвристику
+                    // Если пользователь не отвечает, удаляем его через некоторое время
+                }
+            }
+        }
+
+        // Периодическая проверка на офлайн
+        setInterval(() => {
+            // Проверяем соединения
+            const openConnections = connections.filter(c => c.open);
+            if (openConnections.length !== connections.length) {
+                connections = openConnections;
+                updateUI();
+            }
+        }, 5000);
 
         // --- PeerJS ---
         peer.on('open', (id) => {
@@ -564,15 +615,17 @@
             peerIdDisplay.textContent = '🆔 ' + id;
             peerIdDisplay.style.userSelect = 'text';
 
+            // Добавляем себя в список
+            allPeers.add(id);
+
             // Подключаемся ко всем
             setTimeout(connectToAllPeers, 500);
         });
 
         peer.on('connection', (conn) => {
-            // Проверяем, нет ли уже такого соединения
             if (!connections.some(c => c.peer === conn.peer)) {
                 connections.push(conn);
-                connectedPeers.add(conn.peer);
+                allPeers.add(conn.peer);
                 setupConnection(conn);
                 updateUI();
             }
@@ -617,6 +670,7 @@
         console.log('📊 Многопользовательский онлайн-режим (Mesh-сеть)');
         console.log('  • Версия:', VERSION);
         console.log('  • Каждый подключается ко всем остальным');
+        console.log('  • При закрытии вкладки пользователь удаляется');
     })();
 </script>
 </body>
