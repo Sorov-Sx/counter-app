@@ -220,12 +220,6 @@
             box-shadow: 0 4px 0 #04161f, 0 6px 16px -4px rgba(0,20,30,0.2);
             cursor: not-allowed;
         }
-        .status-text {
-            text-align: center;
-            font-size: 0.75rem;
-            color: #6a8b9e;
-            padding: 4px 0;
-        }
         .info-row {
             display: flex;
             justify-content: space-between;
@@ -339,23 +333,24 @@
 
     <div class="bottom-info">
         <div class="peer-id-display" id="peerIdDisplay">⏳ Получение Peer ID...</div>
-        <div class="version" id="versionDisplay">v.0.0.6</div>
+        <div class="version" id="versionDisplay">v.0.0.7</div>
     </div>
 </div>
 
 <script>
     (function() {
-        const VERSION = 'v.0.0.6';
+        const VERSION = 'v.0.0.7';
         document.getElementById('versionDisplay').textContent = VERSION;
 
-        const tabId = Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+        const myId = Date.now() + '_' + Math.random().toString(36).slice(2, 7);
 
         let allCounters = {};
         let connections = [];
-        let peerId = null;
+        let myPeerId = null;
         let isCreated = false;
-        let x = 0;
-        let knownPeers = new Set();
+        let myX = 0;
+        let connectedPeers = new Set();
+        let reconnectTimer = null;
 
         const peer = new Peer(undefined, {
             host: '0.peerjs.com',
@@ -412,11 +407,11 @@
             nDisplay.textContent = n;
             totalSEl.textContent = formatNumber(S);
 
-            const myCounter = allCounters[tabId];
+            const myCounter = allCounters[myId];
             if (myCounter && myCounter.online) {
-                x = myCounter.x || 0;
-                xInput.value = x;
-                const price = computePrice(x, S, n);
+                myX = myCounter.x || 0;
+                xInput.value = myX;
+                const price = computePrice(myX, S, n);
                 priceDisplay.textContent = formatNumber(price);
             } else {
                 xInput.value = 0;
@@ -427,7 +422,7 @@
         function createCounter() {
             if (isCreated) return;
 
-            allCounters[tabId] = { x: 0, online: true };
+            allCounters[myId] = { x: 0, online: true };
 
             isCreated = true;
             createBtn.disabled = true;
@@ -445,9 +440,9 @@
             if (!isCreated) return;
             if (newX < 0) newX = 0;
 
-            if (allCounters[tabId]) {
-                allCounters[tabId].x = newX;
-                x = newX;
+            if (allCounters[myId]) {
+                allCounters[myId].x = newX;
+                myX = newX;
                 broadcastState();
                 updateUI();
             }
@@ -472,6 +467,7 @@
 
         function receiveState(data) {
             if (data.type === 'state') {
+                // Обновляем данные
                 for (const key in data.counters) {
                     if (!allCounters[key]) {
                         allCounters[key] = { x: 0, online: false };
@@ -480,7 +476,8 @@
                     allCounters[key].online = data.counters[key].online !== false;
                 }
 
-                if (allCounters[tabId] && !isCreated) {
+                // Если наш счётчик ещё не создан, но появился в данных
+                if (allCounters[myId] && !isCreated) {
                     isCreated = true;
                     createBtn.disabled = true;
                     createBtn.textContent = '✅ Счётчик создан';
@@ -494,30 +491,36 @@
             }
         }
 
-        function connectToAllKnownPeers() {
+        // --- Подключение ко ВСЕМ ---
+        function connectToAllPeers() {
+            // Получаем ID из URL
             const urlParams = new URLSearchParams(window.location.search);
-            const connectTo = urlParams.get('connect');
+            const targetPeer = urlParams.get('connect');
             
-            const allPeerIds = new Set(knownPeers);
-            if (connectTo && connectTo !== peerId) {
-                allPeerIds.add(connectTo);
+            // Собираем всех, к кому нужно подключиться
+            const allPeers = new Set(connectedPeers);
+            
+            // Если в URL есть ID и это не мы сами
+            if (targetPeer && targetPeer !== myPeerId) {
+                allPeers.add(targetPeer);
             }
 
-            allPeerIds.forEach(id => {
-                if (id !== peerId && !connections.some(c => c.peer === id)) {
-                    connectToPeer(id);
+            // Подключаемся к каждому
+            allPeers.forEach(peerId => {
+                if (peerId !== myPeerId && !connections.some(c => c.peer === peerId)) {
+                    connectToPeer(peerId);
                 }
             });
         }
 
-        function connectToPeer(id) {
-            if (connections.some(c => c.peer === id)) return;
-            if (id === peerId) return;
+        function connectToPeer(peerId) {
+            if (connections.some(c => c.peer === peerId)) return;
+            if (peerId === myPeerId) return;
 
-            const conn = peer.connect(id);
+            const conn = peer.connect(peerId);
             connections.push(conn);
             setupConnection(conn);
-            connectionStatus.textContent = '🔄 Подключение к ' + id.slice(0, 8) + '...';
+            connectionStatus.textContent = '🔄 Подключение к ' + peerId.slice(0, 8) + '...';
         }
 
         function setupConnection(conn) {
@@ -525,13 +528,17 @@
                 connectionStatus.textContent = '🟢 Связано с ' + conn.peer.slice(0, 8);
                 connectionStatus.className = 'connection-status connected';
                 
+                // Отправляем своё состояние
                 conn.send({
                     type: 'state',
                     counters: allCounters
                 });
 
-                knownPeers.add(conn.peer);
-                setTimeout(connectToAllKnownPeers, 500);
+                // Запоминаем, что подключились к этому пиру
+                connectedPeers.add(conn.peer);
+
+                // Пробуем подключиться к остальным
+                setTimeout(connectToAllPeers, 300);
                 updateUI();
             });
 
@@ -541,27 +548,31 @@
 
             conn.on('close', () => {
                 connections = connections.filter(c => c !== conn);
+                connectedPeers.delete(conn.peer);
                 connectionStatus.textContent = '🟡 Соединение потеряно';
                 connectionStatus.className = 'connection-status disconnected';
                 updateUI();
             });
         }
 
+        // --- PeerJS ---
         peer.on('open', (id) => {
-            peerId = id;
+            myPeerId = id;
             connectionStatus.textContent = '🟢 Подключено!';
             connectionStatus.className = 'connection-status connected';
 
             peerIdDisplay.textContent = '🆔 ' + id;
             peerIdDisplay.style.userSelect = 'text';
 
-            setTimeout(connectToAllKnownPeers, 1000);
+            // Подключаемся ко всем
+            setTimeout(connectToAllPeers, 500);
         });
 
         peer.on('connection', (conn) => {
+            // Проверяем, нет ли уже такого соединения
             if (!connections.some(c => c.peer === conn.peer)) {
                 connections.push(conn);
-                knownPeers.add(conn.peer);
+                connectedPeers.add(conn.peer);
                 setupConnection(conn);
                 updateUI();
             }
@@ -575,6 +586,7 @@
             }
         });
 
+        // --- События ---
         createBtn.addEventListener('click', createCounter);
 
         xInput.addEventListener('input', () => {
@@ -588,21 +600,23 @@
             btn.addEventListener('click', () => {
                 if (!isCreated) return;
                 const delta = parseInt(btn.dataset.delta, 10);
-                setX(x + delta);
+                setX(myX + delta);
             });
         });
 
         resetBtn.addEventListener('click', resetCounter);
 
+        // При закрытии вкладки удаляем себя
         window.addEventListener('beforeunload', () => {
-            if (allCounters[tabId]) {
-                delete allCounters[tabId];
+            if (allCounters[myId]) {
+                delete allCounters[myId];
                 broadcastState();
             }
         });
 
         console.log('📊 Многопользовательский онлайн-режим (Mesh-сеть)');
         console.log('  • Версия:', VERSION);
+        console.log('  • Каждый подключается ко всем остальным');
     })();
 </script>
 </body>
