@@ -264,6 +264,13 @@
             background: #f8d7da;
             color: #721c24;
         }
+        .version {
+            text-align: center;
+            font-size: 0.55rem;
+            color: #b0c7d5;
+            padding: 4px 0;
+            letter-spacing: 0.05em;
+        }
         @media (max-width: 480px) {
             .container { max-width: 100%; }
             .card { padding: 16px 12px 12px; }
@@ -321,26 +328,34 @@
     </div>
 
     <div class="status-text" id="statusText">Нажмите «Создать счётчик», чтобы начать</div>
+    <div class="version" id="versionDisplay">v.0.0.1</div>
 </div>
 
 <script>
     (function() {
-        const STORAGE_KEY = 'counter_online_data';
-        const VERSION = '3.0';
+        const VERSION = 'v.0.0.1';
 
-        // --- PeerJS настройки ---
+        // Показываем версию
+        document.getElementById('versionDisplay').textContent = VERSION;
+
+        // Генерируем уникальный ID для этой вкладки (он живёт только пока открыта вкладка)
+        const tabId = Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+
+        // Все данные хранятся ТОЛЬКО в памяти, не в localStorage!
+        let allCounters = {};
+        let connections = [];
+        let peerId = '';
+        let isCreated = false;
+        let x = 0;
+
+        // PeerJS настройки
         const peer = new Peer(undefined, {
             host: '0.peerjs.com',
             port: 443,
             secure: true
         });
 
-        let connections = [];
-        let peerId = '';
-
-        // Генерируем уникальный ID для этой вкладки
-        const tabId = Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-
+        // DOM элементы
         const createBtn = document.getElementById('createBtn');
         const card = document.getElementById('card');
         const totalSBlock = document.getElementById('totalSBlock');
@@ -348,7 +363,6 @@
         const nDisplay = document.getElementById('nDisplay');
         const userIdDisplay = document.getElementById('userIdDisplay');
         const connectionStatus = document.getElementById('connectionStatus');
-
         const xInput = document.getElementById('xInput');
         const priceDisplay = document.getElementById('priceDisplay');
         const totalSEl = document.getElementById('totalS');
@@ -356,29 +370,6 @@
         const plusBtns = document.querySelectorAll('.plus-btn');
 
         const A = 5;
-
-        let x = 0;
-        let isCreated = false;
-        let allCounters = {};
-
-        // --- Работа с localStorage (локальное кеширование) ---
-        function getGlobalState() {
-            try {
-                const raw = localStorage.getItem(STORAGE_KEY);
-                if (raw) {
-                    const data = JSON.parse(raw);
-                    if (data.version === VERSION) {
-                        return data;
-                    }
-                }
-            } catch (e) {}
-            return { version: VERSION, counters: {} };
-        }
-
-        function saveGlobalState(state) {
-            state.version = VERSION;
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-        }
 
         // --- Формула ---
         function getS() {
@@ -433,11 +424,8 @@
         function createCounter() {
             if (isCreated) return;
 
-            if (!allCounters[tabId]) {
-                allCounters[tabId] = { x: 0, online: true };
-            } else {
-                allCounters[tabId].online = true;
-            }
+            // Всегда создаём новый счётчик с x = 0
+            allCounters[tabId] = { x: 0, online: true };
 
             isCreated = true;
             createBtn.disabled = true;
@@ -451,7 +439,6 @@
 
             broadcastState();
             updateUI();
-            saveGlobalState({ counters: allCounters });
         }
 
         // --- Обновление x ---
@@ -459,12 +446,12 @@
             if (!isCreated) return;
             if (newX < 0) newX = 0;
 
-            allCounters[tabId].x = newX;
-            x = newX;
-
-            broadcastState();
-            updateUI();
-            saveGlobalState({ counters: allCounters });
+            if (allCounters[tabId]) {
+                allCounters[tabId].x = newX;
+                x = newX;
+                broadcastState();
+                updateUI();
+            }
         }
 
         // --- Сброс ---
@@ -489,6 +476,7 @@
         // --- PeerJS: получение состояния ---
         function receiveState(data) {
             if (data.type === 'state') {
+                // Обновляем состояние из полученных данных
                 for (const key in data.counters) {
                     if (!allCounters[key]) {
                         allCounters[key] = { x: 0, online: false };
@@ -497,35 +485,8 @@
                     allCounters[key].online = data.counters[key].online !== false;
                 }
 
-                if (allCounters[tabId]) {
-                    if (!isCreated) {
-                        isCreated = true;
-                        createBtn.disabled = true;
-                        createBtn.textContent = '✅ Счётчик создан';
-                        card.classList.remove('hidden');
-                        totalSBlock.classList.remove('hidden');
-                        xInput.disabled = false;
-                        plusBtns.forEach(btn => btn.disabled = false);
-                        statusText.textContent = 'Счётчик активен';
-                        userIdDisplay.textContent = 'ID: ' + tabId.slice(0, 12) + '...';
-                    }
-                }
-
-                updateUI();
-                saveGlobalState({ counters: allCounters });
-            }
-        }
-
-        // --- PeerJS инициализация ---
-        peer.on('open', (id) => {
-            peerId = id;
-            connectionStatus.textContent = '🟢 Подключено! ID: ' + id.slice(0, 8);
-            connectionStatus.className = 'connection-status connected';
-
-            const saved = getGlobalState();
-            if (saved.counters) {
-                allCounters = saved.counters;
-                if (allCounters[tabId]) {
+                // Проверяем, есть ли наш счётчик в полученных данных
+                if (allCounters[tabId] && !isCreated) {
                     isCreated = true;
                     createBtn.disabled = true;
                     createBtn.textContent = '✅ Счётчик создан';
@@ -535,10 +496,17 @@
                     plusBtns.forEach(btn => btn.disabled = false);
                     statusText.textContent = 'Счётчик активен';
                     userIdDisplay.textContent = 'ID: ' + tabId.slice(0, 12) + '...';
-                    allCounters[tabId].online = true;
                 }
+
                 updateUI();
             }
+        }
+
+        // --- PeerJS инициализация ---
+        peer.on('open', (id) => {
+            peerId = id;
+            connectionStatus.textContent = '🟢 Подключено! ID: ' + id.slice(0, 8);
+            connectionStatus.className = 'connection-status connected';
 
             // Подключаемся к другому пользователю, если есть параметр в URL
             const urlParams = new URLSearchParams(window.location.search);
@@ -607,19 +575,20 @@
 
         resetBtn.addEventListener('click', resetCounter);
 
-        // При закрытии вкладки помечаем пользователя как офлайн
+        // При закрытии вкладки удаляем счётчик
         window.addEventListener('beforeunload', () => {
             if (allCounters[tabId]) {
-                allCounters[tabId].online = false;
+                delete allCounters[tabId];
                 broadcastState();
-                saveGlobalState({ counters: allCounters });
             }
         });
 
         console.log('📊 Многопользовательский онлайн-режим');
+        console.log('  • Версия:', VERSION);
         console.log('  • ID:', tabId);
-        console.log('  • Отправьте другу ссылку с ?connect=ВАШ_ID');
-        console.log('  • Работает через PeerJS (WebRTC)');
+        console.log('  • Данные НЕ сохраняются в localStorage');
+        console.log('  • При закрытии вкладки счётчик удаляется');
+        console.log('  • При перезагрузке создаётся новый счётчик с x=0');
     })();
 </script>
 </body>
