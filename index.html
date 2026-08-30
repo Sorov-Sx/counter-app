@@ -25,8 +25,80 @@
             display: flex;
             flex-direction: column;
             gap: 16px;
-            max-width: 360px;
+            max-width: 600px;
             width: 100%;
+        }
+        .main-layout {
+            display: flex;
+            gap: 16px;
+            align-items: flex-start;
+        }
+        .left-col {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .right-col {
+            width: 250px;
+            flex-shrink: 0;
+            background: #ffffff;
+            border-radius: 24px;
+            padding: 14px 12px;
+            box-shadow: 0 6px 16px -6px rgba(0,20,30,0.10);
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .right-col-title {
+            font-size: 0.65rem;
+            color: #3d5f72;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+            margin-bottom: 8px;
+            text-align: left;
+            border-bottom: 1px solid #f0f5f9;
+            padding-bottom: 6px;
+        }
+        .right-col-title .count {
+            color: #0b2b3d;
+            font-weight: 700;
+        }
+        .user-list-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.6rem;
+            padding: 3px 0;
+            border-bottom: 1px solid #f5f8fa;
+            font-family: monospace;
+            gap: 8px;
+        }
+        .user-list-item .id {
+            color: #3d5f72;
+            white-space: nowrap;
+        }
+        .user-list-item .id.me {
+            color: #0b2b3d;
+            font-weight: 700;
+        }
+        .user-list-item .stat {
+            color: #0c293b;
+            font-weight: 600;
+            white-space: nowrap;
+            text-align: right;
+        }
+        .user-list-item .badge {
+            font-size: 0.45rem;
+            color: #28a745;
+            font-weight: 600;
+            margin-left: 4px;
+        }
+        .user-list-empty {
+            font-size: 0.55rem;
+            color: #b0c7d5;
+            text-align: center;
+            padding: 10px 0;
         }
         .card {
             background: #ffffff;
@@ -220,22 +292,6 @@
             box-shadow: 0 4px 0 #04161f, 0 6px 16px -4px rgba(0,20,30,0.2);
             cursor: not-allowed;
         }
-        .info-row {
-            display: flex;
-            justify-content: space-between;
-            font-size: 0.7rem;
-            color: #3d5f72;
-            background: #eef4f8;
-            padding: 6px 14px;
-            border-radius: 30px;
-        }
-        .info-row .label {
-            font-weight: 450;
-        }
-        .info-row .value {
-            font-weight: 600;
-            color: #0c293b;
-        }
         .connection-status {
             font-size: 0.7rem;
             text-align: center;
@@ -316,6 +372,18 @@
         .card .exit-btn {
             margin-top: 12px;
         }
+        @media (max-width: 700px) {
+            .main-layout {
+                flex-direction: column;
+            }
+            .right-col {
+                width: 100%;
+                max-height: 150px;
+            }
+            .container {
+                max-width: 100%;
+            }
+        }
         @media (max-width: 480px) {
             .container { max-width: 100%; }
             .card { padding: 16px 12px 12px; }
@@ -325,6 +393,8 @@
             .total-s { font-size: 0.75rem; }
             .create-btn { font-size: 0.95rem; padding: 12px 0; }
             .exit-btn { font-size: 0.8rem; padding: 6px 0; }
+            .right-col { max-height: 120px; }
+            .user-list-item { font-size: 0.5rem; }
         }
     </style>
 </head>
@@ -334,66 +404,70 @@
     <div style="text-align: center;">
         <span class="role-badge" id="roleBadge">⏳</span>
     </div>
-    
-    <button class="create-btn" id="createBtn">➕ Создать счётчик</button>
 
-    <div class="info-row" id="infoRow">
-        <span class="label">👥 n (человек)</span>
-        <span class="value" id="nDisplay">0</span>
-    </div>
+    <div class="main-layout">
+        <div class="left-col">
+            <button class="create-btn" id="createBtn">➕ Создать счётчик</button>
 
-    <div class="card hidden" id="card">
-        <button class="reset-btn" id="resetBtn">↺</button>
+            <div class="card hidden" id="card">
+                <button class="reset-btn" id="resetBtn">↺</button>
 
-        <div class="stat-row">
-            <div class="stat-item">
-                <span class="stat-label">статы</span>
-                <span class="stat-value">
-                    <input type="number" id="xInput" value="0" min="0" step="1" disabled>
+                <div class="stat-row">
+                    <div class="stat-item">
+                        <span class="stat-label">статы</span>
+                        <span class="stat-value">
+                            <input type="number" id="xInput" value="0" min="0" step="1" disabled>
+                        </span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">цена</span>
+                        <span class="stat-value price" id="priceDisplay">1</span>
+                    </div>
+                </div>
+
+                <div class="btn-group">
+                    <button class="plus-btn" data-delta="1" disabled>+1</button>
+                    <button class="plus-btn" data-delta="10" disabled>+10</button>
+                    <button class="plus-btn" data-delta="50" disabled>+50</button>
+                </div>
+
+                <div class="hint">счётчик</div>
+                
+                <button class="exit-btn" id="exitBtn">🚪 Выйти</button>
+            </div>
+
+            <div class="total-s hidden" id="totalSBlock">
+                <span>📊 Текущее S</span>
+                <span>
+                    <span class="total-s-value" id="totalS">0</span>
+                    <span class="manual-hint">(авто)</span>
                 </span>
             </div>
-            <div class="stat-item">
-                <span class="stat-label">цена</span>
-                <span class="stat-value price" id="priceDisplay">1</span>
+        </div>
+
+        <div class="right-col" id="userList">
+            <div class="right-col-title" id="userListTitle">👥 Участники (<span class="count" id="userCount">0</span>)</div>
+            <div id="userListContent">
+                <div class="user-list-empty">Нет участников</div>
             </div>
         </div>
-
-        <div class="btn-group">
-            <button class="plus-btn" data-delta="1" disabled>+1</button>
-            <button class="plus-btn" data-delta="10" disabled>+10</button>
-            <button class="plus-btn" data-delta="50" disabled>+50</button>
-        </div>
-
-        <div class="hint">счётчик</div>
-        
-        <button class="exit-btn" id="exitBtn">🚪 Выйти</button>
-    </div>
-
-    <div class="total-s hidden" id="totalSBlock">
-        <span>📊 Текущее S</span>
-        <span>
-            <span class="total-s-value" id="totalS">0</span>
-            <span class="manual-hint">(авто)</span>
-        </span>
     </div>
 
     <div class="bottom-info">
         <div class="peer-id-display" id="peerIdDisplay">⏳ Получение Peer ID...</div>
-        <div class="version" id="versionDisplay">v15</div>
+        <div class="version" id="versionDisplay">v18</div>
     </div>
 </div>
 
 <script>
     (function() {
-        const VERSION = 'v15';
+        const VERSION = 'v18';
         document.getElementById('versionDisplay').textContent = VERSION;
 
-        const myId = Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-        
-        let allCounters = {};           // Все пользователи с активными счётчиками
-        let allConnected = {};          // Все подключённые пользователи (даже без счётчика)
-        let connections = [];
         let myPeerId = null;
+        let allCounters = {};
+        let allConnected = {};
+        let connections = [];
         let isCreated = false;
         let myX = 0;
         let isHost = false;
@@ -410,7 +484,6 @@
         const createBtn = document.getElementById('createBtn');
         const card = document.getElementById('card');
         const totalSBlock = document.getElementById('totalSBlock');
-        const nDisplay = document.getElementById('nDisplay');
         const peerIdDisplay = document.getElementById('peerIdDisplay');
         const connectionStatus = document.getElementById('connectionStatus');
         const roleBadge = document.getElementById('roleBadge');
@@ -420,10 +493,11 @@
         const resetBtn = document.getElementById('resetBtn');
         const exitBtn = document.getElementById('exitBtn');
         const plusBtns = document.querySelectorAll('.plus-btn');
+        const userListContent = document.getElementById('userListContent');
+        const userCount = document.getElementById('userCount');
 
         const A = 5;
 
-        // ==================== ФОРМУЛЫ ====================
         function getS() {
             let sum = 0;
             for (const key in allCounters) {
@@ -454,14 +528,18 @@
             return rounded < 1 ? 1 : rounded;
         }
 
+        function getShortId(id) {
+            return id.slice(0, 8);
+        }
+
         function updateUI() {
             const S = getS();
             const n = getN();
 
-            nDisplay.textContent = n;
             totalSEl.textContent = formatNumber(S);
+            userCount.textContent = n;
 
-            const myCounter = allCounters[myId];
+            const myCounter = allCounters[myPeerId];
             if (myCounter && myCounter.online) {
                 myX = myCounter.x || 0;
                 xInput.value = myX;
@@ -471,9 +549,32 @@
                 xInput.value = 0;
                 priceDisplay.textContent = '1';
             }
+
+            updateUserList();
         }
 
-        // ==================== ВЫХОД ====================
+        function updateUserList() {
+            const keys = Object.keys(allCounters);
+            if (keys.length === 0) {
+                userListContent.innerHTML = '<div class="user-list-empty">Нет участников</div>';
+                return;
+            }
+
+            let html = '';
+            for (const key of keys) {
+                if (allCounters[key].online) {
+                    const shortId = getShortId(key);
+                    const stat = allCounters[key].x || 0;
+                    const isMe = (key === myPeerId);
+                    html += `<div class="user-list-item">
+                        <span class="id${isMe ? ' me' : ''}">${shortId}${isMe ? ' <span class="badge">(Вы)</span>' : ''}</span>
+                        <span class="stat">${formatNumber(stat)}</span>
+                    </div>`;
+                }
+            }
+            userListContent.innerHTML = html;
+        }
+
         function exitUser() {
             if (!isCreated) return;
             if (isExited) return;
@@ -481,9 +582,8 @@
             console.log('🚪 Пользователь выходит...');
             isExited = true;
             
-            // Удаляем себя из allCounters (НО НЕ из allConnected)
-            if (allCounters[myId]) {
-                delete allCounters[myId];
+            if (allCounters[myPeerId]) {
+                delete allCounters[myPeerId];
             }
             
             if (isHost) {
@@ -494,7 +594,7 @@
             } else {
                 sendToHost({
                     type: 'client_leave',
-                    userId: myId
+                    userId: myPeerId
                 });
             }
             
@@ -514,7 +614,6 @@
             console.log('✅ Выполнен выход');
         }
 
-        // ==================== ХОСТ ====================
         function becomeHost() {
             isHost = true;
             isHostConfirmed = true;
@@ -523,8 +622,7 @@
             roleBadge.className = 'role-badge host';
             console.log('👑 Я СТАЛ ХОСТОМ!');
             
-            // Добавляем себя в allConnected (как подключённый)
-            allConnected[myId] = { online: true };
+            allConnected[myPeerId] = { online: true };
             
             broadcastToAll({
                 type: 'host_is',
@@ -540,15 +638,14 @@
             roleBadge.className = 'role-badge client';
             console.log('👤 Я СТАЛ КЛИЕНТОМ, хост:', hostId);
             
-            allConnected[myId] = { online: true };
+            allConnected[myPeerId] = { online: true };
             
             sendToHost({
                 type: 'client_connected',
-                userId: myId
+                userId: myPeerId
             });
         }
 
-        // ==================== ОТПРАВКА ====================
         function broadcastToAll(data) {
             connections.forEach(conn => {
                 if (conn.open) {
@@ -566,12 +663,11 @@
             }
         }
 
-        // ==================== ПОЛУЧЕНИЕ ====================
         function receiveData(data, senderPeerId) {
             if (data.type === 'full_state') {
                 allCounters = data.counters || {};
-                if (allCounters[myId]) {
-                    allCounters[myId].online = true;
+                if (allCounters[myPeerId]) {
+                    allCounters[myPeerId].online = true;
                 }
                 updateUI();
             }
@@ -590,7 +686,6 @@
                 }
             }
             else if (data.type === 'client_connected') {
-                // Клиент просто подключился (НО НЕ создал счётчик!)
                 if (isHost) {
                     const { userId } = data;
                     allConnected[userId] = { online: true };
@@ -598,7 +693,6 @@
                 }
             }
             else if (data.type === 'client_create_counter') {
-                // Клиент создал счётчик!
                 if (isHost) {
                     const { userId } = data;
                     if (!allCounters[userId]) {
@@ -675,10 +769,10 @@
             else if (data.type === 'host_reset_all') {
                 if (!isHost) {
                     allCounters = {};
-                    allCounters[myId] = { x: 0, online: true };
+                    allCounters[myPeerId] = { x: 0, online: true };
                     sendToHost({
                         type: 'client_update',
-                        userId: myId,
+                        userId: myPeerId,
                         x: myX
                     });
                     updateUI();
@@ -686,7 +780,6 @@
             }
         }
 
-        // ==================== ПОДКЛЮЧЕНИЕ ====================
         function setupConnection(conn) {
             conn.on('open', () => {
                 connectionStatus.textContent = '🟢 Связано с ' + conn.peer.slice(0, 8);
@@ -733,7 +826,6 @@
             connectionStatus.textContent = '🔄 Подключение к ' + peerId.slice(0, 8) + '...';
         }
 
-        // ==================== СОЗДАНИЕ СЧЁТЧИКА ====================
         function createCounter() {
             if (isCreated) return;
             if (isExited) {
@@ -769,9 +861,8 @@
         function finishCreateCounter() {
             if (isCreated) return;
             
-            // Добавляем себя в allCounters (только здесь!)
-            if (!allCounters[myId]) {
-                allCounters[myId] = { x: 0, online: true };
+            if (!allCounters[myPeerId]) {
+                allCounters[myPeerId] = { x: 0, online: true };
                 console.log('✅ Счётчик создан!');
             }
             
@@ -781,14 +872,13 @@
                     counters: allCounters
                 });
             } else {
-                // Сообщаем хосту, что мы создали счётчик
                 sendToHost({
                     type: 'client_create_counter',
-                    userId: myId
+                    userId: myPeerId
                 });
                 sendToHost({
                     type: 'client_update',
-                    userId: myId,
+                    userId: myPeerId,
                     x: myX
                 });
             }
@@ -805,16 +895,15 @@
             updateUI();
         }
 
-        // ==================== ИЗМЕНЕНИЕ СТАТ ====================
         function setX(newX) {
             if (!isCreated) return;
             if (newX < 0) newX = 0;
 
             myX = newX;
             
-            if (allCounters[myId]) {
-                allCounters[myId].x = myX;
-                allCounters[myId].online = true;
+            if (allCounters[myPeerId]) {
+                allCounters[myPeerId].x = myX;
+                allCounters[myPeerId].online = true;
             }
 
             if (isHost) {
@@ -825,7 +914,7 @@
             } else {
                 sendToHost({
                     type: 'client_update',
-                    userId: myId,
+                    userId: myPeerId,
                     x: myX
                 });
             }
@@ -833,7 +922,6 @@
             updateUI();
         }
 
-        // ==================== СБРОС ====================
         function resetCounter() {
             if (!isCreated) return;
             
@@ -852,16 +940,16 @@
                 console.log('🔄 Хост сбросил всех');
             } else {
                 myX = 0;
-                if (allCounters[myId]) {
-                    allCounters[myId].x = 0;
+                if (allCounters[myPeerId]) {
+                    allCounters[myPeerId].x = 0;
                 }
                 sendToHost({
                     type: 'client_reset',
-                    userId: myId
+                    userId: myPeerId
                 });
                 sendToHost({
                     type: 'client_update',
-                    userId: myId,
+                    userId: myPeerId,
                     x: 0
                 });
                 updateUI();
@@ -869,7 +957,6 @@
             }
         }
 
-        // ==================== PEERJS ====================
         peer.on('open', (id) => {
             myPeerId = id;
             connectionStatus.textContent = '🟢 Подключено!';
@@ -908,7 +995,6 @@
             }
         });
 
-        // ==================== СОБЫТИЯ ====================
         createBtn.addEventListener('click', createCounter);
 
         xInput.addEventListener('input', () => {
@@ -929,12 +1015,11 @@
         resetBtn.addEventListener('click', resetCounter);
         exitBtn.addEventListener('click', exitUser);
 
-        // ==================== СТАРТ ====================
-        console.log('📊 Новая архитектура v15');
+        console.log('📊 Новая архитектура v18');
         console.log('  • Версия:', VERSION);
-        console.log('  • n добавляется ТОЛЬКО после нажатия "Создать счётчик"');
-        console.log('  • Подключение без счётчика не увеличивает n');
-        console.log('  • Кнопка "Выход" сбрасывает пользователя');
+        console.log('  • Ширина списка участников увеличена до 250px');
+        console.log('  • Текст не переносится');
+        console.log('  • Выравнивание влево');
     })();
 </script>
 </body>
