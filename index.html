@@ -92,7 +92,7 @@
 <div class="container">
     <div class="ip-setup-hint" id="ipHint">
         <strong>🔧 Настройка для Radmin VPN</strong>
-        <span id="ipHintText">Настройте IP-адрес хоста в коде (строка с PEER_HOST)</span>
+        <span id="ipHintText">Хост: 26.126.98.156:9000</span>
     </div>
 
     <div class="connection-status" id="connectionStatus">⏳ Подключение...</div>
@@ -128,30 +128,22 @@
 
     <div class="bottom-info">
         <div class="peer-id-display" id="peerIdDisplay">⏳ Получение Peer ID...</div>
-        <div class="server-info" id="serverInfo">🔗 Сервер: локальный (Radmin VPN)</div>
-        <div class="version" id="versionDisplay">v37</div>
+        <div class="server-info" id="serverInfo">🔗 Сервер: Radmin VPN</div>
+        <div class="version" id="versionDisplay">v38</div>
     </div>
 </div>
 
 <script>
 (function() {
-    const VERSION = 'v37';
+    const VERSION = 'v38';
     document.getElementById('versionDisplay').textContent = VERSION;
 
     // ============================================
     // 🔧 НАСТРОЙКА: УКАЖИТЕ IP ХОСТА В RADMIN VPN
     // ============================================
-    // ХОСТ (тот, кто запускает peerjs сервер):
-    //   - Узнайте свой IP в Radmin VPN (например, 25.50.10.5)
-    //   - Замените '25.50.10.5' на свой IP
-    // ============================================
-    const PEER_HOST = '26.126.98.156';   // ← ИЗМЕНИТЕ НА IP ХОСТА В RADMIN VPN
+    const PEER_HOST = '26.126.98.156';
     const PEER_PORT = 9000;
     const PEER_SECURE = false;
-
-    // Показываем подсказку с текущим IP
-    document.getElementById('ipHintText').textContent = 
-        `Хост: ${PEER_HOST}:${PEER_PORT} (измените в коде, если нужно)`;
 
     let myPeerId = null;
     let allCounters = {};
@@ -165,12 +157,9 @@
     let isExited = false;
     let peer = null;
 
-    // ==========================================
-    // PEERJS ПОДКЛЮЧЕНИЕ К ЛОКАЛЬНОМУ СЕРВЕРУ
-    // ==========================================
     function initPeerJS() {
         document.getElementById('serverInfo').textContent = `🔗 Подключение к ${PEER_HOST}:${PEER_PORT}...`;
-        connectionStatus.textContent = `🔄 Подключение к локальному серверу...`;
+        connectionStatus.textContent = `🔄 Подключение...`;
         connectionStatus.className = 'connection-status trying';
 
         try {
@@ -199,11 +188,11 @@
                 
                 if (connectTo) {
                     hostPeerId = connectTo;
-                    roleBadge.textContent = '👤 КЛИЕНТ (подключение)';
+                    roleBadge.textContent = '👤 КЛИЕНТ';
                     roleBadge.className = 'role-badge client';
                     setTimeout(() => connectToPeer(connectTo), 500);
                 } else {
-                    roleBadge.textContent = '👑 ХОСТ (ожидание)';
+                    roleBadge.textContent = '👑 ХОСТ';
                     roleBadge.className = 'role-badge host';
                     isHost = true;
                     isHostConfirmed = true;
@@ -240,9 +229,6 @@
         }
     }
 
-    // ==========================================
-    // НАСТРОЙКА СОЕДИНЕНИЯ
-    // ==========================================
     function setupConnection(conn) {
         conn.on('open', () => {
             connectionStatus.textContent = '🟢 Связано с ' + conn.peer.slice(0, 8);
@@ -278,9 +264,6 @@
         });
     }
 
-    // ==========================================
-    // ПОДКЛЮЧЕНИЕ К ДРУГОМУ ПИРУ
-    // ==========================================
     function connectToPeer(peerId) {
         if (connections.some(c => c.peer === peerId)) return;
         if (peerId === myPeerId) return;
@@ -292,9 +275,6 @@
         connectionStatus.textContent = '🔄 Подключение к ' + peerId.slice(0, 8) + '...';
     }
 
-    // ==========================================
-    // ПОЛУЧЕНИЕ ДАННЫХ
-    // ==========================================
     function receiveData(data, senderPeerId) {
         if (data.type === 'full_state') {
             allCounters = data.counters || {};
@@ -321,7 +301,7 @@
             if (isHost) {
                 const { userId } = data;
                 allConnected[userId] = { online: true };
-                console.log(`🔗 Клиент ${userId} подключился (без счётчика)`);
+                console.log(`🔗 Клиент ${userId} подключился`);
             }
         }
         else if (data.type === 'client_create_counter') {
@@ -351,7 +331,7 @@
             if (isHost) {
                 const { userId } = data;
                 if (allCounters[userId]) {
-                    console.log(`👋 Клиент ${userId} вышел (удалён из счётчиков)`);
+                    console.log(`👋 Клиент ${userId} вышел`);
                     delete allCounters[userId];
                     broadcastToAll({
                         type: 'full_state',
@@ -444,9 +424,6 @@
         }
     }
 
-    // ==========================================
-    // ОСТАЛЬНАЯ ЛОГИКА
-    // ==========================================
     const createBtn = document.getElementById('createBtn');
     const card = document.getElementById('card');
     const totalSBlock = document.getElementById('totalSBlock');
@@ -568,9 +545,6 @@
         }
     }
 
-    // ==========================================
-    // ЗАПУСК
-    // ==========================================
     createBtn.addEventListener('click', createCounter);
     xInput.addEventListener('input', ()=>{ if(!isCreated) return; let val=parseInt(xInput.value,10); if(isNaN(val)||val<0) val=0; setX(val); });
     plusBtns.forEach(btn=>{ btn.addEventListener('click', ()=>{ if(!isCreated) return; const delta=parseInt(btn.dataset.delta,10); setX(myX+delta); }); });
@@ -578,7 +552,7 @@
     exitBtn.addEventListener('click', exitUser);
 
     // ЗАПУСК
-    initPeerJS();
+    setTimeout(initPeerJS, 500);
 
     console.log('📊 Версия:', VERSION);
     console.log(`🔗 Подключение к ${PEER_HOST}:${PEER_PORT}`);
