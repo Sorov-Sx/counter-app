@@ -372,15 +372,6 @@
         .card .exit-btn {
             margin-top: 12px;
         }
-        .troubleshoot-hint {
-            font-size: 0.55rem;
-            color: #9aafbb;
-            text-align: center;
-            padding: 4px 0;
-            background: #f5f8fa;
-            border-radius: 30px;
-            margin-top: 4px;
-        }
         @media (max-width: 700px) {
             .main-layout {
                 flex-direction: column;
@@ -464,14 +455,13 @@
 
     <div class="bottom-info">
         <div class="peer-id-display" id="peerIdDisplay">⏳ Получение Peer ID...</div>
-        <div class="version" id="versionDisplay">v19</div>
-        <div class="troubleshoot-hint">💡 Если не подключается: обновите страницу (Ctrl+F5) или попробуйте другой браузер</div>
+        <div class="version" id="versionDisplay">v20</div>
     </div>
 </div>
 
 <script>
     (function() {
-        const VERSION = 'v19';
+        const VERSION = 'v20';
         document.getElementById('versionDisplay').textContent = VERSION;
 
         let myPeerId = null;
@@ -485,24 +475,17 @@
         let isHostConfirmed = false;
         let isExited = false;
 
-        // ============================================
-        //  ПЕРЕДОВОЙ PEERJS С TURN-СЕРВЕРАМИ
-        //  Для обхода NAT и корпоративных сетей
-        // ============================================
         const peer = new Peer(undefined, {
             host: '0.peerjs.com',
             port: 443,
             secure: true,
             config: {
                 iceServers: [
-                    // Бесплатные STUN сервера Google
                     { urls: 'stun:stun.l.google.com:19302' },
                     { urls: 'stun:stun1.l.google.com:19302' },
                     { urls: 'stun:stun2.l.google.com:19302' },
                     { urls: 'stun:stun3.l.google.com:19302' },
                     { urls: 'stun:stun4.l.google.com:19302' },
-                    
-                    // Бесплатные TURN сервера (для обхода NAT)
                     {
                         urls: 'turn:openrelay.metered.ca:80',
                         username: 'openrelayproject',
@@ -1056,11 +1039,7 @@
         resetBtn.addEventListener('click', resetCounter);
         exitBtn.addEventListener('click', exitUser);
 
-        console.log('📊 Новая архитектура v19 (с TURN-серверами)');
-        console.log('  • Версия:', VERSION);
-        console.log('  • Добавлены TURN-сервера для обхода NAT');
-        console.log('  • Улучшена совместимость с корпоративными сетями');
-        console.log('  • Если не подключается: обновите страницу (Ctrl+F5)');
+        console.log('📊 Версия:', VERSION);
     })();
 </script>
 </body>
