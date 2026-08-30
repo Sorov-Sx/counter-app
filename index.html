@@ -277,17 +277,10 @@
             user-select: text;
             cursor: text;
         }
-        .connections-list {
-            font-size: 0.6rem;
-            color: #6a8b9e;
-            text-align: center;
-            padding: 2px 0;
-        }
-        .copy-hint {
-            font-size: 0.55rem;
-            color: #b0c7d5;
-            text-align: center;
-            padding: 2px 0;
+        .bottom-info {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
         }
         @media (max-width: 480px) {
             .container { max-width: 100%; }
@@ -344,17 +337,15 @@
         </span>
     </div>
 
-    <div class="peer-id-display" id="peerIdDisplay">⏳ Получение Peer ID...</div>
-    <div class="copy-hint">(выделите мышкой и скопируйте)</div>
-    <div class="connections-list" id="connectionsList">Подключений: 0</div>
-
-    <div class="status-text" id="statusText">Нажмите «Создать счётчик», чтобы начать</div>
-    <div class="version" id="versionDisplay">v.0.0.5</div>
+    <div class="bottom-info">
+        <div class="peer-id-display" id="peerIdDisplay">⏳ Получение Peer ID...</div>
+        <div class="version" id="versionDisplay">v.0.0.6</div>
+    </div>
 </div>
 
 <script>
     (function() {
-        const VERSION = 'v.0.0.5';
+        const VERSION = 'v.0.0.6';
         document.getElementById('versionDisplay').textContent = VERSION;
 
         const tabId = Date.now() + '_' + Math.random().toString(36).slice(2, 7);
@@ -375,11 +366,9 @@
         const createBtn = document.getElementById('createBtn');
         const card = document.getElementById('card');
         const totalSBlock = document.getElementById('totalSBlock');
-        const statusText = document.getElementById('statusText');
         const nDisplay = document.getElementById('nDisplay');
         const peerIdDisplay = document.getElementById('peerIdDisplay');
         const connectionStatus = document.getElementById('connectionStatus');
-        const connectionsList = document.getElementById('connectionsList');
         const xInput = document.getElementById('xInput');
         const priceDisplay = document.getElementById('priceDisplay');
         const totalSEl = document.getElementById('totalS');
@@ -422,7 +411,6 @@
 
             nDisplay.textContent = n;
             totalSEl.textContent = formatNumber(S);
-            connectionsList.textContent = 'Подключений: ' + connections.length;
 
             const myCounter = allCounters[tabId];
             if (myCounter && myCounter.online) {
@@ -448,7 +436,6 @@
             totalSBlock.classList.remove('hidden');
             xInput.disabled = false;
             plusBtns.forEach(btn => btn.disabled = false);
-            statusText.textContent = 'Счётчик активен';
 
             broadcastState();
             updateUI();
@@ -501,7 +488,6 @@
                     totalSBlock.classList.remove('hidden');
                     xInput.disabled = false;
                     plusBtns.forEach(btn => btn.disabled = false);
-                    statusText.textContent = 'Счётчик активен';
                 }
 
                 updateUI();
@@ -566,7 +552,7 @@
             connectionStatus.textContent = '🟢 Подключено!';
             connectionStatus.className = 'connection-status connected';
 
-            peerIdDisplay.textContent = '🔗 Ваш Peer ID: ' + id;
+            peerIdDisplay.textContent = '🆔 ' + id;
             peerIdDisplay.style.userSelect = 'text';
 
             setTimeout(connectToAllKnownPeers, 1000);
@@ -617,7 +603,6 @@
 
         console.log('📊 Многопользовательский онлайн-режим (Mesh-сеть)');
         console.log('  • Версия:', VERSION);
-        console.log('  • Peer ID отображается внизу, можно выделить мышкой');
     })();
 </script>
 </body>
