@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Счётчик — Онлайн</title>
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="https://unpkg.com/@metered-ca/realtime@1.0.6/dist/index.js"></script>
     <style>
         * { margin:0; padding:0; box-sizing:border-box; user-select:none; }
         body { min-height:100vh; background:#eef4f8; display:flex; align-items:center; justify-content:center; font-family:system-ui, sans-serif; padding:20px; }
@@ -53,7 +53,6 @@
         .connection-status.connected { background:#d4edda; color:#155724; }
         .connection-status.disconnected { background:#f8d7da; color:#721c24; }
         .connection-status.trying { background:#fff3cd; color:#856404; }
-        .connection-status.timeout { background:#ffe5cc; color:#8a4b00; }
         .version { text-align:center; font-size:0.55rem; color:#b0c7d5; padding:4px 0; letter-spacing:0.05em; }
         .peer-id-display { font-size:0.7rem; text-align:center; color:#3d5f72; background:#eef4f8; padding:6px 12px; border-radius:30px; font-family:monospace; word-break:break-all; user-select:text; cursor:text; }
         .bottom-info { display:flex; flex-direction:column; gap:6px; }
@@ -104,14 +103,14 @@
 
     <div class="bottom-info">
         <div class="peer-id-display" id="peerIdDisplay">⏳ Получение Peer ID...</div>
-        <div class="server-info" id="serverInfo">🔗 Сервер: ожидание...</div>
-        <div class="version" id="versionDisplay">v32</div>
+        <div class="server-info" id="serverInfo">🔗 Meteor: подготовка...</div>
+        <div class="version" id="versionDisplay">v33</div>
     </div>
 </div>
 
 <script>
 (function() {
-    const VERSION = 'v32';
+    const VERSION = 'v33';
     document.getElementById('versionDisplay').textContent = VERSION;
 
     let myPeerId = null;
@@ -125,234 +124,201 @@
     let isHostConfirmed = false;
     let isExited = false;
     let peer = null;
-    let currentServerIndex = 0;
-    let isConnecting = false;
-    let connectionTimeout = null;
-    let isPeerReady = false;
 
     // ==========================================
-    // СПИСОК СЕРВЕРОВ
+    // ИСПОЛЬЗУЕМ METERED ВМЕСТО PEERJS
+    // Встроенные TURN-сервера для обхода блокировок
     // ==========================================
-    const servers = [
-        { 
-            host: '0.peerjs.com', 
-            port: 443, 
-            secure: true,
-            label: 'Основной (0.peerjs.com)',
-            status: '⏳ ожидание'
-        },
-        { 
-            host: 'peerjs-server.herokuapp.com', 
-            port: 443, 
-            secure: true,
-            label: 'Резервный (Heroku)',
-            status: '⏳ ожидание'
-        },
-        { 
-            host: 'peerjs-server.cyclic.app', 
-            port: 443, 
-            secure: true,
-            label: 'Резервный (Cyclic)',
-            status: '⏳ ожидание'
-        }
-    ];
+    const options = {
+        turn: true,               // Включаем TURN
+        turnServers: [            // TURN сервера
+            'turn:openrelay.metered.ca:80',
+            'turn:openrelay.metered.ca:443',
+            'turn:openrelay.metered.ca:443?transport=tcp'
+        ],
+        turnUsername: 'openrelayproject',
+        turnPassword: 'openrelayproject',
+        stun: true,               // Включаем STUN
+        stunServers: [            // STUN сервера
+            'stun:stun.l.google.com:19302',
+            'stun:stun1.l.google.com:19302',
+            'stun:stun2.l.google.com:19302'
+        ]
+    };
 
-    function updateServerInfo() {
-        const info = document.getElementById('serverInfo');
-        let text = '🔗 ';
-        for (let i = 0; i < servers.length; i++) {
-            const s = servers[i];
-            const statusEmoji = s.status === '✅ работает' ? '🟢' :
-                               s.status === '❌ ошибка' ? '🔴' :
-                               s.status === '⏳ попытка...' ? '🟡' : '⏳';
-            text += `${statusEmoji} ${s.host}`;
-            if (i < servers.length - 1) text += ' | ';
-        }
-        info.textContent = text;
-    }
-
-    function setServerStatus(index, status) {
-        if (index < servers.length) {
-            servers[index].status = status;
-            updateServerInfo();
-        }
-    }
-
-    // ==========================================
-    // СОЗДАНИЕ PEER С ТАЙМАУТОМ
-    // ==========================================
-    function createPeer(serverIndex) {
-        // Очищаем старый таймаут
-        if (connectionTimeout) {
-            clearTimeout(connectionTimeout);
-            connectionTimeout = null;
-        }
-
-        if (peer) {
-            try { 
-                peer.destroy(); 
-            } catch(e) {}
-            peer = null;
-        }
-        
-        if (serverIndex >= servers.length) {
-            connectionStatus.textContent = '❌ Все серверы недоступны. Включите VPN.';
-            connectionStatus.className = 'connection-status disconnected';
-            isConnecting = false;
-            return null;
-        }
-
-        const server = servers[serverIndex];
-        isPeerReady = false;
-        setServerStatus(serverIndex, '⏳ попытка...');
-        connectionStatus.textContent = `🔄 Попытка ${serverIndex+1}/${servers.length}: ${server.host}...`;
+    function initMetered() {
+        document.getElementById('serverInfo').textContent = '🔗 Meteor: подключение...';
+        connectionStatus.textContent = '🔄 Инициализация Meteor...';
         connectionStatus.className = 'connection-status trying';
-        document.getElementById('serverInfo').textContent = `🔗 ${server.host} (${serverIndex+1}/${servers.length})`;
-        
-        console.log(`🔗 Попытка ${serverIndex+1}/${servers.length}: ${server.host}`);
 
-        // Таймаут: если через 8 секунд нет ответа — переключаемся
-        connectionTimeout = setTimeout(() => {
-            if (!isPeerReady) {
-                console.log(`⏰ Таймаут! ${server.host} не отвечает. Переключение...`);
-                connectionStatus.textContent = `⏰ Таймаут: ${server.host}`;
-                connectionStatus.className = 'connection-status timeout';
-                setServerStatus(serverIndex, '❌ ошибка (таймаут)');
-                currentServerIndex++;
-                isConnecting = false;
-                setTimeout(() => {
-                    createPeer(currentServerIndex);
-                }, 1000);
-            }
-        }, 8000);
+        try {
+            // Создаём комнату
+            const room = new window.MeteredRealtime('my-counter-room', options);
+            
+            // Генерируем уникальный ID
+            myPeerId = Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+            
+            // Событие: открытие комнаты
+            room.on('open', () => {
+                document.getElementById('serverInfo').textContent = '🔗 Meteor: ✅ подключено!';
+                connectionStatus.textContent = '🟢 Подключено!';
+                connectionStatus.className = 'connection-status connected';
+                peerIdDisplay.textContent = '🆔 ' + myPeerId;
+                peerIdDisplay.style.userSelect = 'text';
 
-        return new Peer(undefined, {
-            host: server.host,
-            port: server.port,
-            secure: server.secure,
-            config: {
-                iceServers: [
-                    { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' },
-                    { urls: 'stun:stun2.l.google.com:19302' },
-                    { urls: 'stun:stun3.l.google.com:19302' },
-                    { urls: 'stun:stun4.l.google.com:19302' }
-                ]
-            }
-        });
-    }
+                // Проверяем параметры URL
+                const urlParams = new URLSearchParams(window.location.search);
+                const connectTo = urlParams.get('connect');
+                
+                if (connectTo) {
+                    hostPeerId = connectTo;
+                    roleBadge.textContent = '👤 КЛИЕНТ (подключение)';
+                    roleBadge.className = 'role-badge client';
+                    // Отправляем запрос на присоединение
+                    room.send('JOIN_REQUEST', { userId: myPeerId });
+                } else {
+                    roleBadge.textContent = '👑 ХОСТ (ожидание)';
+                    roleBadge.className = 'role-badge host';
+                    isHost = true;
+                    isHostConfirmed = true;
+                    hostPeerId = myPeerId;
+                    allCounters[myPeerId] = { x: 0, online: true };
+                    updateUI();
+                    // Хост отправляет полное состояние
+                    room.send('FULL_STATE', { counters: allCounters });
+                }
 
-    function initPeer() {
-        if (isConnecting) return;
-        isConnecting = true;
-        peer = createPeer(currentServerIndex);
-        if (peer) {
-            setupPeerEvents();
-        }
-    }
+                // Сохраняем room в глобальную переменную
+                window.room = room;
+                setupRoomEvents(room);
+            });
 
-    function nextServer() {
-        setServerStatus(currentServerIndex, '❌ ошибка');
-        currentServerIndex++;
-        isConnecting = false;
-        
-        if (connectionTimeout) {
-            clearTimeout(connectionTimeout);
-            connectionTimeout = null;
-        }
+            // Событие: ошибка
+            room.on('error', (err) => {
+                console.error('Metered error:', err);
+                connectionStatus.textContent = '❌ Ошибка: ' + err.message;
+                connectionStatus.className = 'connection-status disconnected';
+                document.getElementById('serverInfo').textContent = '🔗 Meteor: ❌ ошибка';
+            });
 
-        if (currentServerIndex >= servers.length) {
-            connectionStatus.textContent = '❌ Все серверы недоступны. Включите VPN.';
+            // Событие: закрытие
+            room.on('close', () => {
+                connectionStatus.textContent = '🟡 Соединение закрыто';
+                connectionStatus.className = 'connection-status disconnected';
+                document.getElementById('serverInfo').textContent = '🔗 Meteor: закрыто';
+            });
+
+        } catch (e) {
+            console.error('Metered init error:', e);
+            connectionStatus.textContent = '❌ Ошибка инициализации: ' + e.message;
             connectionStatus.className = 'connection-status disconnected';
-            document.getElementById('serverInfo').textContent = '🔗 Все серверы недоступны';
-            return;
         }
-        
-        setTimeout(() => {
-            initPeer();
-        }, 1000);
     }
 
-    function setupPeerEvents() {
-        peer.on('open', (id) => {
-            // Таймаут отменяем — сервер ответил
-            if (connectionTimeout) {
-                clearTimeout(connectionTimeout);
-                connectionTimeout = null;
+    function setupRoomEvents(room) {
+        // Слушаем сообщения от других
+        room.on('message', (data, senderId) => {
+            console.log('📩 Получено:', data.type, 'от', senderId);
+            
+            // Получаем ID отправителя
+            const senderPeerId = senderId || 'unknown';
+            
+            if (data.type === 'FULL_STATE') {
+                // Полное состояние от хоста
+                if (!isHost) {
+                    allCounters = data.counters || {};
+                    if (allCounters[myPeerId]) {
+                        allCounters[myPeerId].online = true;
+                    }
+                    updateUI();
+                }
             }
-            
-            isPeerReady = true;
-            isConnecting = false;
-            myPeerId = id;
-            setServerStatus(currentServerIndex, '✅ работает');
-            connectionStatus.textContent = '🟢 Подключено! (' + servers[currentServerIndex].host + ')';
-            connectionStatus.className = 'connection-status connected';
-            peerIdDisplay.textContent = '🆔 ' + id;
-            peerIdDisplay.style.userSelect = 'text';
-            document.getElementById('serverInfo').textContent = `🔗 ${servers[currentServerIndex].host} ✅`;
-
-            const urlParams = new URLSearchParams(window.location.search);
-            const connectTo = urlParams.get('connect');
-            
-            if (connectTo) {
-                hostPeerId = connectTo;
-                roleBadge.textContent = '👤 КЛИЕНТ (подключение)';
-                roleBadge.className = 'role-badge client';
-                setTimeout(() => connectToPeer(connectTo), 500);
-            } else {
-                roleBadge.textContent = '👑 ХОСТ (ожидание)';
-                roleBadge.className = 'role-badge host';
+            else if (data.type === 'JOIN_REQUEST') {
+                // Новый участник хочет присоединиться
+                if (isHost) {
+                    const { userId } = data;
+                    if (!allCounters[userId]) {
+                        allCounters[userId] = { x: 0, online: true };
+                        console.log(`👤 Новый участник: ${userId}`);
+                        // Отправляем полное состояние новому участнику
+                        room.send('FULL_STATE', { counters: allCounters });
+                        // Рассылаем всем обновление
+                        room.broadcast('FULL_STATE', { counters: allCounters });
+                        updateUI();
+                    }
+                }
+            }
+            else if (data.type === 'CLIENT_UPDATE') {
+                // Обновление от клиента
+                if (isHost) {
+                    const { userId, x } = data;
+                    if (allCounters[userId]) {
+                        allCounters[userId].x = x || 0;
+                        allCounters[userId].online = true;
+                        // Рассылаем всем обновление
+                        room.broadcast('FULL_STATE', { counters: allCounters });
+                        updateUI();
+                    }
+                }
+            }
+            else if (data.type === 'CLIENT_LEAVE') {
+                // Участник вышел
+                if (isHost) {
+                    const { userId } = data;
+                    if (allCounters[userId]) {
+                        console.log(`👋 Участник ${userId} вышел`);
+                        delete allCounters[userId];
+                        room.broadcast('FULL_STATE', { counters: allCounters });
+                        updateUI();
+                    }
+                }
+            }
+            else if (data.type === 'CLIENT_RESET') {
+                // Клиент сбросил себя
+                if (isHost) {
+                    const { userId } = data;
+                    if (allCounters[userId]) {
+                        allCounters[userId].x = 0;
+                        room.broadcast('FULL_STATE', { counters: allCounters });
+                        updateUI();
+                    }
+                }
+            }
+            else if (data.type === 'HOST_RESET_ALL') {
+                // Хост сбросил всех
+                if (!isHost) {
+                    allCounters = {};
+                    allCounters[myPeerId] = { x: 0, online: true };
+                    room.send('CLIENT_UPDATE', { userId: myPeerId, x: myX });
+                    updateUI();
+                }
             }
         });
 
-        peer.on('connection', (conn) => {
-            if (!connections.some(c => c.peer === conn.peer)) {
-                connections.push(conn);
-                setupConnection(conn);
-                updateUI();
+        // Слушаем подключение новых участников
+        room.on('peer-join', (peerInfo) => {
+            console.log('👤 Новый peer подключился:', peerInfo);
+            if (isHost) {
+                // Отправляем полное состояние новому участнику
+                room.send('FULL_STATE', { counters: allCounters });
             }
         });
 
-        peer.on('error', (err) => {
-            console.error('Peer error:', err);
-            
-            // Если ошибка уже обработана таймаутом — игнорируем
-            if (!isConnecting && isPeerReady) {
-                // Если уже подключились, но ошибка позже
-                if (err.message.includes('unavailable') || err.message.includes('Could not connect')) {
-                    connectionStatus.textContent = '⚠️ ' + err.message.slice(0, 40);
-                    connectionStatus.className = 'connection-status disconnected';
+        room.on('peer-leave', (peerInfo) => {
+            console.log('👋 Peer отключился:', peerInfo);
+            if (isHost) {
+                const userId = peerInfo.id || peerInfo.peerId;
+                if (userId && allCounters[userId]) {
+                    delete allCounters[userId];
+                    room.broadcast('FULL_STATE', { counters: allCounters });
+                    updateUI();
                 }
-                return;
-            }
-
-            // Если ошибка во время подключения — пробуем следующий сервер
-            if (err.message.includes('unavailable') || 
-                err.message.includes('Could not connect') ||
-                err.message.includes('timeout') ||
-                err.message.includes('closed')) {
-                
-                setServerStatus(currentServerIndex, '❌ ошибка');
-                connectionStatus.textContent = `⚠️ ${err.message.slice(0, 40)}...`;
-                connectionStatus.className = 'connection-status disconnected';
-                
-                if (connectionTimeout) {
-                    clearTimeout(connectionTimeout);
-                    connectionTimeout = null;
-                }
-                
-                setTimeout(() => {
-                    nextServer();
-                }, 1000);
-            } else {
-                connectionStatus.textContent = '⚠️ ' + err.message.slice(0, 30);
-                connectionStatus.className = 'connection-status disconnected';
             }
         });
     }
 
     // ==========================================
-    // ОСТАЛЬНАЯ ЛОГИКА (без изменений)
+    // ОСТАЛЬНАЯ ЛОГИКА
     // ==========================================
     const createBtn = document.getElementById('createBtn');
     const card = document.getElementById('card');
@@ -406,8 +372,11 @@
         if(!isCreated||isExited) return;
         isExited=true;
         if(allCounters[myPeerId]) delete allCounters[myPeerId];
-        if(isHost) broadcastToAll({type:'full_state', counters:allCounters});
-        else sendToHost({type:'client_leave', userId:myPeerId});
+        if(isHost && window.room) {
+            window.room.broadcast('FULL_STATE', { counters: allCounters });
+        } else if(window.room) {
+            window.room.send('CLIENT_LEAVE', { userId: myPeerId });
+        }
         isCreated=false; myX=0;
         createBtn.disabled=false; createBtn.textContent='➕ Создать счётчик';
         card.classList.add('hidden'); totalSBlock.classList.add('hidden');
@@ -417,113 +386,25 @@
         updateUI();
     }
 
-    function becomeHost() {
-        isHost=true; isHostConfirmed=true; hostPeerId=myPeerId;
-        roleBadge.textContent='👑 ХОСТ'; roleBadge.className='role-badge host';
-        allConnected[myPeerId]={online:true};
-        broadcastToAll({type:'host_is', hostId:myPeerId});
-    }
-
-    function becomeClient(hostId) {
-        isHost=false; isHostConfirmed=true; hostPeerId=hostId;
-        roleBadge.textContent='👤 КЛИЕНТ'; roleBadge.className='role-badge client';
-        allConnected[myPeerId]={online:true};
-        sendToHost({type:'client_connected', userId:myPeerId});
-    }
-
-    function broadcastToAll(data){ connections.forEach(conn=>{ if(conn.open) conn.send(data); }); }
-    function sendToHost(data){ const hostConn=connections.find(c=>c.peer===hostPeerId); if(hostConn&&hostConn.open) hostConn.send(data); else console.log('⚠️ Нет соединения с хостом'); }
-
-    function receiveData(data, senderPeerId) {
-        if(data.type==='full_state'){ allCounters=data.counters||{}; if(allCounters[myPeerId]) allCounters[myPeerId].online=true; updateUI(); }
-        else if(data.type==='client_update'){
-            if(isHost){ const {userId,x}=data; if(allCounters[userId]){ allCounters[userId].x=x||0; allCounters[userId].online=true; broadcastToAll({type:'full_state', counters:allCounters}); updateUI(); } }
-        }
-        else if(data.type==='client_connected'){
-            if(isHost){ const {userId}=data; allConnected[userId]={online:true}; }
-        }
-        else if(data.type==='client_create_counter'){
-            if(isHost){
-                const {userId}=data;
-                if(!allCounters[userId]){
-                    allCounters[userId]={x:0, online:true};
-                    const conn=connections.find(c=>c.peer===senderPeerId);
-                    if(conn&&conn.open) conn.send({type:'full_state', counters:allCounters});
-                    broadcastToAll({type:'full_state', counters:allCounters});
-                    updateUI();
-                }
-            }
-        }
-        else if(data.type==='client_leave'){
-            if(isHost){
-                const {userId}=data;
-                if(allCounters[userId]){ delete allCounters[userId]; broadcastToAll({type:'full_state', counters:allCounters}); updateUI(); }
-                if(allConnected[userId]) delete allConnected[userId];
-            }
-        }
-        else if(data.type==='who_is_host'){
-            if(isHost){ const conn=connections.find(c=>c.peer===senderPeerId); if(conn&&conn.open) conn.send({type:'host_is', hostId:myPeerId}); }
-        }
-        else if(data.type==='host_is'){
-            if(!isHostConfirmed){
-                const {hostId}=data;
-                if(hostId===myPeerId) becomeHost();
-                else becomeClient(hostId);
-            }
-        }
-        else if(data.type==='client_reset'){
-            if(isHost){ const {userId}=data; if(allCounters[userId]){ allCounters[userId].x=0; broadcastToAll({type:'full_state', counters:allCounters}); updateUI(); } }
-        }
-        else if(data.type==='host_reset_all'){
-            if(!isHost){ allCounters={}; allCounters[myPeerId]={x:0, online:true}; sendToHost({type:'client_update', userId:myPeerId, x:myX}); updateUI(); }
-        }
-    }
-
-    function setupConnection(conn) {
-        conn.on('open', ()=>{
-            connectionStatus.textContent='🟢 Связано с '+conn.peer.slice(0,8);
-            connectionStatus.className='connection-status connected';
-            if(isHost&&isHostConfirmed){ conn.send({type:'full_state', counters:allCounters}); conn.send({type:'host_is', hostId:myPeerId}); }
-            else if(!isHostConfirmed){ conn.send({type:'who_is_host'}); }
-            updateUI();
-        });
-        conn.on('data', (data)=>{ receiveData(data, conn.peer); });
-        conn.on('close', ()=>{
-            connections=connections.filter(c=>c!==conn);
-            connectionStatus.textContent='🟡 Соединение потеряно';
-            connectionStatus.className='connection-status disconnected';
-            updateUI();
-        });
-    }
-
-    function connectToPeer(peerId) {
-        if(connections.some(c=>c.peer===peerId)) return;
-        if(peerId===myPeerId) return;
-        const conn=peer.connect(peerId);
-        connections.push(conn);
-        setupConnection(conn);
-        connectionStatus.textContent='🔄 Подключение к '+peerId.slice(0,8)+'...';
-    }
-
     function createCounter() {
         if(isCreated) return;
         if(isExited) isExited=false;
-        if(isHostConfirmed){}
-        else {
-            if(connections.length>0){
-                connections.forEach(conn=>{ if(conn.open) conn.send({type:'who_is_host'}); });
-                setTimeout(()=>{ if(!isHostConfirmed){ becomeHost(); finishCreateCounter(); } }, 1000);
-                return;
-            } else { becomeHost(); }
+        
+        if (!isHost) {
+            // Клиент: отправляем запрос на присоединение
+            if (window.room) {
+                window.room.send('JOIN_REQUEST', { userId: myPeerId });
+                // И отправляем свои статы
+                window.room.send('CLIENT_UPDATE', { userId: myPeerId, x: myX });
+            }
         }
-        finishCreateCounter();
-    }
-
-    function finishCreateCounter() {
-        if(isCreated) return;
+        
         if(!allCounters[myPeerId]){ allCounters[myPeerId]={x:0, online:true}; }
-        if(isHost){ broadcastToAll({type:'full_state', counters:allCounters}); }
-        else { sendToHost({type:'client_create_counter', userId:myPeerId}); sendToHost({type:'client_update', userId:myPeerId, x:myX}); }
+        
+        if(isHost && window.room) {
+            window.room.broadcast('FULL_STATE', { counters: allCounters });
+        }
+        
         isCreated=true;
         createBtn.disabled=true; createBtn.textContent='✅ Счётчик создан';
         card.classList.remove('hidden'); totalSBlock.classList.remove('hidden');
@@ -536,23 +417,25 @@
         if(newX<0) newX=0;
         myX=newX;
         if(allCounters[myPeerId]){ allCounters[myPeerId].x=myX; allCounters[myPeerId].online=true; }
-        if(isHost){ broadcastToAll({type:'full_state', counters:allCounters}); }
-        else { sendToHost({type:'client_update', userId:myPeerId, x:myX}); }
+        if(isHost && window.room){ window.room.broadcast('FULL_STATE', { counters: allCounters }); }
+        else if(window.room){ window.room.send('CLIENT_UPDATE', { userId: myPeerId, x: myX }); }
         updateUI();
     }
 
     function resetCounter() {
         if(!isCreated) return;
-        if(isHost){
+        if(isHost && window.room){
             for(const key in allCounters){ allCounters[key].x=0; }
-            broadcastToAll({type:'full_state', counters:allCounters});
-            broadcastToAll({type:'host_reset_all'});
+            window.room.broadcast('FULL_STATE', { counters: allCounters });
+            window.room.broadcast('HOST_RESET_ALL', {});
             updateUI();
         } else {
             myX=0;
             if(allCounters[myPeerId]) allCounters[myPeerId].x=0;
-            sendToHost({type:'client_reset', userId:myPeerId});
-            sendToHost({type:'client_update', userId:myPeerId, x:0});
+            if(window.room) {
+                window.room.send('CLIENT_RESET', { userId: myPeerId });
+                window.room.send('CLIENT_UPDATE', { userId: myPeerId, x: 0 });
+            }
             updateUI();
         }
     }
@@ -566,12 +449,12 @@
     resetBtn.addEventListener('click', resetCounter);
     exitBtn.addEventListener('click', exitUser);
 
-    // ЗАПУСК
-    initPeer();
+    // ЗАПУСКАЕМ METERED
+    initMetered();
 
     console.log('📊 Версия:', VERSION);
-    console.log('⏰ Таймаут 8 секунд на каждый сервер');
-    console.log('🔄 Автоматическая смена при таймауте или ошибке');
+    console.log('🔗 Используется Metered Realtime (с TURN-серверами)');
+    console.log('🔗 TURN сервера: openrelay.metered.ca');
 })();
 </script>
 </body>
