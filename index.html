@@ -292,6 +292,30 @@
         .role-badge.client {
             background: #17a2b8;
         }
+        .exit-btn {
+            background: #dc3545;
+            border: none;
+            color: white;
+            font-size: 0.9rem;
+            font-weight: 500;
+            padding: 8px 0;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: 0.15s;
+            line-height: 1;
+            width: 100%;
+            margin-top: 8px;
+        }
+        .exit-btn:hover {
+            background: #c82333;
+        }
+        .exit-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .card .exit-btn {
+            margin-top: 12px;
+        }
         @media (max-width: 480px) {
             .container { max-width: 100%; }
             .card { padding: 16px 12px 12px; }
@@ -300,6 +324,7 @@
             .btn-group .plus-btn { font-size: 0.85rem; padding: 6px 0; }
             .total-s { font-size: 0.75rem; }
             .create-btn { font-size: 0.95rem; padding: 12px 0; }
+            .exit-btn { font-size: 0.8rem; padding: 6px 0; }
         }
     </style>
 </head>
@@ -340,6 +365,8 @@
         </div>
 
         <div class="hint">счётчик</div>
+        
+        <button class="exit-btn" id="exitBtn">🚪 Выйти</button>
     </div>
 
     <div class="total-s hidden" id="totalSBlock">
@@ -352,36 +379,33 @@
 
     <div class="bottom-info">
         <div class="peer-id-display" id="peerIdDisplay">⏳ Получение Peer ID...</div>
-        <div class="version" id="versionDisplay">v13</div>
+        <div class="version" id="versionDisplay">v14</div>
     </div>
 </div>
 
 <script>
     (function() {
-        const VERSION = 'v13';
+        const VERSION = 'v14';
         document.getElementById('versionDisplay').textContent = VERSION;
 
-        // Уникальный ID пользователя (сохраняется на всю жизнь вкладки)
         const myId = Date.now() + '_' + Math.random().toString(36).slice(2, 7);
         
-        // Состояние
-        let allCounters = {};           // Все данные: { userId: { x, online } }
-        let connections = [];           // Все соединения
-        let myPeerId = null;            // Мой PeerJS ID
-        let isCreated = false;          // Создан ли счётчик
-        let myX = 0;                    // Мои статы
-        let isHost = false;             // Я хост?
-        let hostPeerId = null;          // ID хоста (если я клиент)
-        let isHostConfirmed = false;    // Подтверждено ли, что я хост
-        
-        // PeerJS
+        let allCounters = {};
+        let connections = [];
+        let myPeerId = null;
+        let isCreated = false;
+        let myX = 0;
+        let isHost = false;
+        let hostPeerId = null;
+        let isHostConfirmed = false;
+        let isExited = false;
+
         const peer = new Peer(undefined, {
             host: '0.peerjs.com',
             port: 443,
             secure: true
         });
 
-        // DOM элементы
         const createBtn = document.getElementById('createBtn');
         const card = document.getElementById('card');
         const totalSBlock = document.getElementById('totalSBlock');
@@ -393,11 +417,11 @@
         const priceDisplay = document.getElementById('priceDisplay');
         const totalSEl = document.getElementById('totalS');
         const resetBtn = document.getElementById('resetBtn');
+        const exitBtn = document.getElementById('exitBtn');
         const plusBtns = document.querySelectorAll('.plus-btn');
 
         const A = 5;
 
-        // ==================== ФОРМУЛЫ ====================
         function getS() {
             let sum = 0;
             for (const key in allCounters) {
@@ -428,7 +452,6 @@
             return rounded < 1 ? 1 : rounded;
         }
 
-        // ==================== UI ====================
         function updateUI() {
             const S = getS();
             const n = getN();
@@ -448,6 +471,51 @@
             }
         }
 
+        // ==================== ВЫХОД ====================
+        function exitUser() {
+            if (!isCreated) return;
+            if (isExited) return;
+            
+            console.log('🚪 Пользователь выходит...');
+            isExited = true;
+            
+            // Удаляем себя из allCounters
+            if (allCounters[myId]) {
+                delete allCounters[myId];
+            }
+            
+            // Если я хост — рассылаю обновление всем
+            if (isHost) {
+                broadcastToAll({
+                    type: 'full_state',
+                    counters: allCounters
+                });
+            } else {
+                // Если я клиент — сообщаю хосту
+                sendToHost({
+                    type: 'client_leave',
+                    userId: myId
+                });
+            }
+            
+            // Сбрасываем UI в начальное состояние
+            isCreated = false;
+            myX = 0;
+            createBtn.disabled = false;
+            createBtn.textContent = '➕ Создать счётчик';
+            card.classList.add('hidden');
+            totalSBlock.classList.add('hidden');
+            xInput.disabled = true;
+            xInput.value = 0;
+            plusBtns.forEach(btn => btn.disabled = true);
+            priceDisplay.textContent = '1';
+            
+            // Обновляем UI
+            updateUI();
+            
+            console.log('✅ Выполнен выход');
+        }
+
         // ==================== ХОСТ ====================
         function becomeHost() {
             isHost = true;
@@ -457,16 +525,13 @@
             roleBadge.className = 'role-badge host';
             console.log('👑 Я СТАЛ ХОСТОМ!');
             
-            // Создаём свой счётчик
             allCounters[myId] = { x: 0, online: true };
             
-            // Отправляем всем, что мы хост
             broadcastToAll({
                 type: 'host_is',
                 hostId: myPeerId
             });
             
-            // Отправляем всем полное состояние
             broadcastToAll({
                 type: 'full_state',
                 counters: allCounters
@@ -481,16 +546,13 @@
             roleBadge.className = 'role-badge client';
             console.log('👤 Я СТАЛ КЛИЕНТОМ, хост:', hostId);
             
-            // Создаём свой счётчик
             allCounters[myId] = { x: 0, online: true };
             
-            // Отправляем хосту, что мы присоединились
             sendToHost({
                 type: 'client_join',
                 userId: myId
             });
             
-            // Отправляем свои статы
             sendToHost({
                 type: 'client_update',
                 userId: myId,
@@ -518,10 +580,7 @@
 
         // ==================== ПОЛУЧЕНИЕ ====================
         function receiveData(data, senderPeerId) {
-            console.log('📩 Получено:', data.type, 'от', senderPeerId);
-            
             if (data.type === 'full_state') {
-                // Полное состояние от хоста
                 allCounters = data.counters || {};
                 if (allCounters[myId]) {
                     allCounters[myId].online = true;
@@ -529,13 +588,11 @@
                 updateUI();
             }
             else if (data.type === 'client_update') {
-                // Обновление от клиента (только для хоста)
                 if (isHost) {
                     const { userId, x } = data;
                     if (allCounters[userId]) {
                         allCounters[userId].x = x || 0;
                         allCounters[userId].online = true;
-                        // Рассылаем всем обновление
                         broadcastToAll({
                             type: 'full_state',
                             counters: allCounters
@@ -545,14 +602,12 @@
                 }
             }
             else if (data.type === 'client_join') {
-                // Новый клиент присоединился (только для хоста)
                 if (isHost) {
                     const { userId } = data;
                     if (!allCounters[userId]) {
                         allCounters[userId] = { x: 0, online: true };
                         console.log(`👤 Новый клиент: ${userId}`);
                         
-                        // Отправляем новому клиенту полное состояние
                         const conn = connections.find(c => c.peer === senderPeerId);
                         if (conn && conn.open) {
                             conn.send({
@@ -561,7 +616,20 @@
                             });
                         }
                         
-                        // Рассылаем всем обновление
+                        broadcastToAll({
+                            type: 'full_state',
+                            counters: allCounters
+                        });
+                        updateUI();
+                    }
+                }
+            }
+            else if (data.type === 'client_leave') {
+                if (isHost) {
+                    const { userId } = data;
+                    if (allCounters[userId]) {
+                        console.log(`👋 Клиент ${userId} вышел`);
+                        delete allCounters[userId];
                         broadcastToAll({
                             type: 'full_state',
                             counters: allCounters
@@ -571,7 +639,6 @@
                 }
             }
             else if (data.type === 'who_is_host') {
-                // Кто-то спрашивает, кто хост
                 if (isHost) {
                     const conn = connections.find(c => c.peer === senderPeerId);
                     if (conn && conn.open) {
@@ -583,20 +650,16 @@
                 }
             }
             else if (data.type === 'host_is') {
-                // Получили ответ о том, кто хост
                 if (!isHostConfirmed) {
                     const { hostId } = data;
                     if (hostId === myPeerId) {
-                        // Я хост!
                         becomeHost();
                     } else {
-                        // Я клиент!
                         becomeClient(hostId);
                     }
                 }
             }
             else if (data.type === 'client_reset') {
-                // Клиент сбросил свои статы
                 if (isHost) {
                     const { userId } = data;
                     if (allCounters[userId]) {
@@ -610,11 +673,9 @@
                 }
             }
             else if (data.type === 'host_reset_all') {
-                // Хост сбросил всех
                 if (!isHost) {
                     allCounters = {};
                     allCounters[myId] = { x: 0, online: true };
-                    // Отправляем хосту свои статы
                     sendToHost({
                         type: 'client_update',
                         userId: myId,
@@ -631,7 +692,6 @@
                 connectionStatus.textContent = '🟢 Связано с ' + conn.peer.slice(0, 8);
                 connectionStatus.className = 'connection-status connected';
                 
-                // Если я хост — отправляю состояние
                 if (isHost && isHostConfirmed) {
                     conn.send({
                         type: 'full_state',
@@ -642,7 +702,6 @@
                         hostId: myPeerId
                     });
                 } else if (!isHostConfirmed) {
-                    // Если я ещё не определился — спрашиваю, кто хост
                     conn.send({
                         type: 'who_is_host'
                     });
@@ -677,13 +736,13 @@
         // ==================== СОЗДАНИЕ СЧЁТЧИКА ====================
         function createCounter() {
             if (isCreated) return;
+            if (isExited) {
+                isExited = false;
+            }
 
-            // Если мы уже знаем, кто хост
             if (isHostConfirmed) {
                 // Уже определились
             } else {
-                // Ещё не определились — пробуем узнать
-                // Если есть соединения — спрашиваем
                 if (connections.length > 0) {
                     connections.forEach(conn => {
                         if (conn.open) {
@@ -692,17 +751,14 @@
                             });
                         }
                     });
-                    // Ждём ответ 1 секунду
                     setTimeout(() => {
                         if (!isHostConfirmed) {
-                            // Никто не ответил — я хост!
                             becomeHost();
                             finishCreateCounter();
                         }
                     }, 1000);
                     return;
                 } else {
-                    // Нет соединений — я хост!
                     becomeHost();
                 }
             }
@@ -713,19 +769,16 @@
         function finishCreateCounter() {
             if (isCreated) return;
             
-            // Добавляем себя, если ещё нет
             if (!allCounters[myId]) {
                 allCounters[myId] = { x: 0, online: true };
             }
             
-            // Если я хост — рассылаю всем
             if (isHost) {
                 broadcastToAll({
                     type: 'full_state',
                     counters: allCounters
                 });
             } else {
-                // Если я клиент — отправляю хосту
                 sendToHost({
                     type: 'client_join',
                     userId: myId
@@ -744,6 +797,7 @@
             totalSBlock.classList.remove('hidden');
             xInput.disabled = false;
             plusBtns.forEach(btn => btn.disabled = false);
+            exitBtn.disabled = false;
 
             updateUI();
             console.log('✅ Счётчик создан!');
@@ -782,7 +836,6 @@
             if (!isCreated) return;
             
             if (isHost) {
-                // Хост сбрасывает ВСЕХ
                 for (const key in allCounters) {
                     allCounters[key].x = 0;
                 }
@@ -796,7 +849,6 @@
                 updateUI();
                 console.log('🔄 Хост сбросил всех');
             } else {
-                // Клиент сбрасывает только себя
                 myX = 0;
                 if (allCounters[myId]) {
                     allCounters[myId].x = 0;
@@ -835,7 +887,6 @@
             } else {
                 roleBadge.textContent = '👑 ХОСТ (ожидание)';
                 roleBadge.className = 'role-badge host';
-                // Не становимся хостом сразу — ждём создания счётчика
             }
         });
 
@@ -874,14 +925,14 @@
         });
 
         resetBtn.addEventListener('click', resetCounter);
+        exitBtn.addEventListener('click', exitUser);
 
         // ==================== СТАРТ ====================
-        console.log('📊 Новая архитектура v13');
+        console.log('📊 Новая архитектура v14');
         console.log('  • Версия:', VERSION);
-        console.log('  • Первый создавший счётчик = Хост');
-        console.log('  • Нет автоматического отключения');
+        console.log('  • n увеличивается только при создании счётчика');
+        console.log('  • Кнопка "Выход" сбрасывает пользователя');
         console.log('  • Кнопка сброса работает');
-        console.log('  • Новая вкладка = новый пользователь');
     })();
 </script>
 </body>
