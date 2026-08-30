@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Счётчик — Онлайн</title>
+    <title>Счётчик — Онлайн (Radmin VPN)</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         * { margin:0; padding:0; box-sizing:border-box; user-select:none; }
@@ -64,12 +64,37 @@
         .exit-btn:disabled { opacity:0.4; cursor:not-allowed; }
         .card .exit-btn { margin-top:12px; }
         .server-info { font-size:0.5rem; color:#9aafbb; text-align:center; padding:2px 0; font-family:monospace; }
+        .ip-setup-hint {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            border-radius: 12px;
+            padding: 12px 16px;
+            margin-bottom: 8px;
+            font-size: 0.75rem;
+            color: #856404;
+        }
+        .ip-setup-hint strong {
+            display: block;
+            font-size: 0.8rem;
+            margin-bottom: 4px;
+        }
+        .ip-setup-hint code {
+            background: #fff;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+        }
         @media (max-width:700px) { .main-layout { flex-direction:column; } .right-col { width:100%; max-height:150px; } .container { max-width:100%; } }
         @media (max-width:480px) { .container { max-width:100%; } .card { padding:16px 12px 12px; } .stat-value.price { font-size:1.3rem; } .stat-value input { width:60px; font-size:0.9rem; } .btn-group .plus-btn { font-size:0.85rem; padding:6px 0; } .total-s { font-size:0.75rem; } .create-btn { font-size:0.95rem; padding:12px 0; } .exit-btn { font-size:0.8rem; padding:6px 0; } .right-col { max-height:120px; } .user-list-item { font-size:0.5rem; } }
     </style>
 </head>
 <body>
 <div class="container">
+    <div class="ip-setup-hint" id="ipHint">
+        <strong>🔧 Настройка для Radmin VPN</strong>
+        <span id="ipHintText">Настройте IP-адрес хоста в коде (строка с PEER_HOST)</span>
+    </div>
+
     <div class="connection-status" id="connectionStatus">⏳ Подключение...</div>
     <div style="text-align:center;"><span class="role-badge" id="roleBadge">⏳</span></div>
 
@@ -103,15 +128,30 @@
 
     <div class="bottom-info">
         <div class="peer-id-display" id="peerIdDisplay">⏳ Получение Peer ID...</div>
-        <div class="server-info" id="serverInfo">🔗 PeerJS: подключение...</div>
-        <div class="version" id="versionDisplay">v36</div>
+        <div class="server-info" id="serverInfo">🔗 Сервер: локальный (Radmin VPN)</div>
+        <div class="version" id="versionDisplay">v37</div>
     </div>
 </div>
 
 <script>
 (function() {
-    const VERSION = 'v36';
+    const VERSION = 'v37';
     document.getElementById('versionDisplay').textContent = VERSION;
+
+    // ============================================
+    // 🔧 НАСТРОЙКА: УКАЖИТЕ IP ХОСТА В RADMIN VPN
+    // ============================================
+    // ХОСТ (тот, кто запускает peerjs сервер):
+    //   - Узнайте свой IP в Radmin VPN (например, 25.50.10.5)
+    //   - Замените '25.50.10.5' на свой IP
+    // ============================================
+    const PEER_HOST = '26.126.98.156';   // ← ИЗМЕНИТЕ НА IP ХОСТА В RADMIN VPN
+    const PEER_PORT = 9000;
+    const PEER_SECURE = false;
+
+    // Показываем подсказку с текущим IP
+    document.getElementById('ipHintText').textContent = 
+        `Хост: ${PEER_HOST}:${PEER_PORT} (измените в коде, если нужно)`;
 
     let myPeerId = null;
     let allCounters = {};
@@ -126,35 +166,29 @@
     let peer = null;
 
     // ==========================================
-    // PEERJS ИНИЦИАЛИЗАЦИЯ
+    // PEERJS ПОДКЛЮЧЕНИЕ К ЛОКАЛЬНОМУ СЕРВЕРУ
     // ==========================================
     function initPeerJS() {
-        document.getElementById('serverInfo').textContent = '🔗 PeerJS: подключение...';
-        connectionStatus.textContent = '🔄 Подключение к PeerJS...';
+        document.getElementById('serverInfo').textContent = `🔗 Подключение к ${PEER_HOST}:${PEER_PORT}...`;
+        connectionStatus.textContent = `🔄 Подключение к локальному серверу...`;
         connectionStatus.className = 'connection-status trying';
 
         try {
             peer = new Peer(undefined, {
-                host: '0.peerjs.com',
-                port: 443,
-                secure: true,
+                host: PEER_HOST,
+                port: PEER_PORT,
+                secure: PEER_SECURE,
                 config: {
                     iceServers: [
                         { urls: 'stun:stun.l.google.com:19302' },
-                        { urls: 'stun:stun1.l.google.com:19302' },
-                        { urls: 'stun:stun2.l.google.com:19302' },
-                        { urls: 'stun:stun3.l.google.com:19302' },
-                        { urls: 'stun:stun4.l.google.com:19302' }
+                        { urls: 'stun:stun1.l.google.com:19302' }
                     ]
                 }
             });
 
-            // ==========================================
-            // СОБЫТИЕ OPEN — ПОЛУЧАЕМ ID
-            // ==========================================
             peer.on('open', (id) => {
                 myPeerId = id;
-                document.getElementById('serverInfo').textContent = '🔗 PeerJS: ✅ подключено!';
+                document.getElementById('serverInfo').textContent = `🔗 ✅ Подключено к ${PEER_HOST}`;
                 connectionStatus.textContent = '🟢 Подключено!';
                 connectionStatus.className = 'connection-status connected';
                 peerIdDisplay.textContent = '🆔 ' + id;
@@ -167,7 +201,6 @@
                     hostPeerId = connectTo;
                     roleBadge.textContent = '👤 КЛИЕНТ (подключение)';
                     roleBadge.className = 'role-badge client';
-                    // Подключаемся к хосту
                     setTimeout(() => connectToPeer(connectTo), 500);
                 } else {
                     roleBadge.textContent = '👑 ХОСТ (ожидание)';
@@ -180,9 +213,6 @@
                 }
             });
 
-            // ==========================================
-            // ВХОДЯЩЕЕ СОЕДИНЕНИЕ
-            // ==========================================
             peer.on('connection', (conn) => {
                 if (!connections.some(c => c.peer === conn.peer)) {
                     connections.push(conn);
@@ -191,15 +221,15 @@
                 }
             });
 
-            // ==========================================
-            // ОШИБКИ
-            // ==========================================
             peer.on('error', (err) => {
                 console.error('Peer error:', err);
                 if (err.message.includes('unavailable') || err.message.includes('Could not connect')) {
+                    connectionStatus.textContent = `⚠️ Сервер ${PEER_HOST}:${PEER_PORT} недоступен`;
+                    connectionStatus.className = 'connection-status disconnected';
+                    document.getElementById('serverInfo').textContent = `🔗 ❌ Сервер не отвечает`;
+                } else {
                     connectionStatus.textContent = '⚠️ ' + err.message.slice(0, 40);
                     connectionStatus.className = 'connection-status disconnected';
-                    document.getElementById('serverInfo').textContent = '🔗 PeerJS: ❌ ошибка';
                 }
             });
 
@@ -551,7 +581,7 @@
     initPeerJS();
 
     console.log('📊 Версия:', VERSION);
-    console.log('🔗 Используется чистый PeerJS');
+    console.log(`🔗 Подключение к ${PEER_HOST}:${PEER_PORT}`);
 })();
 </script>
 </body>
