@@ -6,966 +6,166 @@
     <title>Счётчик — Онлайн</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            user-select: none;
-        }
-        body {
-            min-height: 100vh;
-            background: #eef4f8;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-            padding: 20px;
-        }
-        .container {
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-            max-width: 600px;
-            width: 100%;
-        }
-        .main-layout {
-            display: flex;
-            gap: 16px;
-            align-items: flex-start;
-        }
-        .left-col {
-            flex: 1;
-            min-width: 0;
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-        }
-        .right-col {
-            width: 250px;
-            flex-shrink: 0;
-            background: #ffffff;
-            border-radius: 24px;
-            padding: 14px 12px;
-            box-shadow: 0 6px 16px -6px rgba(0,20,30,0.10);
-            max-height: 400px;
-            overflow-y: auto;
-        }
-        .right-col-title {
-            font-size: 0.65rem;
-            color: #3d5f72;
-            font-weight: 600;
-            letter-spacing: 0.03em;
-            margin-bottom: 8px;
-            text-align: left;
-            border-bottom: 1px solid #f0f5f9;
-            padding-bottom: 6px;
-        }
-        .right-col-title .count {
-            color: #0b2b3d;
-            font-weight: 700;
-        }
-        .user-list-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 0.6rem;
-            padding: 3px 0;
-            border-bottom: 1px solid #f5f8fa;
-            font-family: monospace;
-            gap: 8px;
-        }
-        .user-list-item .id {
-            color: #3d5f72;
-            white-space: nowrap;
-        }
-        .user-list-item .id.me {
-            color: #0b2b3d;
-            font-weight: 700;
-        }
-        .user-list-item .stat {
-            color: #0c293b;
-            font-weight: 600;
-            white-space: nowrap;
-            text-align: right;
-        }
-        .user-list-item .badge {
-            font-size: 0.45rem;
-            color: #28a745;
-            font-weight: 600;
-            margin-left: 4px;
-        }
-        .user-list-empty {
-            font-size: 0.55rem;
-            color: #b0c7d5;
-            text-align: center;
-            padding: 10px 0;
-        }
-        .card {
-            background: #ffffff;
-            border-radius: 24px;
-            padding: 20px 16px 16px;
-            box-shadow: 0 6px 16px -6px rgba(0,20,30,0.10);
-            position: relative;
-            display: flex;
-            flex-direction: column;
-            min-width: 0;
-            transition: opacity 0.3s;
-        }
-        .card.hidden {
-            display: none;
-        }
-        .reset-btn {
-            position: absolute;
-            top: 6px;
-            left: 8px;
-            background: transparent;
-            border: none;
-            font-size: 0.85rem;
-            color: #9aafbb;
-            cursor: pointer;
-            padding: 2px 6px;
-            border-radius: 30px;
-            transition: 0.1s;
-            font-weight: 300;
-        }
-        .reset-btn:hover {
-            color: #2d4d61;
-            background: #eef3f7;
-        }
-        .stat-row {
-            margin-top: 6px;
-            display: flex;
-            flex-direction: column;
-            gap: 1px;
-        }
-        .stat-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-            padding: 4px 0;
-            border-bottom: 1px solid #f0f5f9;
-        }
-        .stat-item:last-child {
-            border-bottom: none;
-        }
-        .stat-label {
-            color: #3d5f72;
-            font-weight: 450;
-            font-size: 0.7rem;
-            letter-spacing: 0.02em;
-            text-transform: uppercase;
-        }
-        .stat-value {
-            font-weight: 550;
-            font-size: 1rem;
-            color: #0c293b;
-            letter-spacing: -0.01em;
-        }
-        .stat-value.price {
-            font-size: 1.6rem;
-            font-weight: 600;
-        }
-        .stat-value input {
-            width: 70px;
-            padding: 4px 8px;
-            border: 2px solid #d0dce6;
-            border-radius: 8px;
-            font-size: 1rem;
-            font-weight: 500;
-            color: #0c293b;
-            background: #f8fafc;
-            outline: none;
-            transition: 0.15s;
-            font-family: inherit;
-            text-align: right;
-            -moz-appearance: textfield;
-        }
-        .stat-value input:disabled {
-            opacity: 0.4;
-            background: #eef4f8;
-            cursor: not-allowed;
-        }
-        .stat-value input::-webkit-inner-spin-button,
-        .stat-value input::-webkit-outer-spin-button {
-            -webkit-appearance: none;
-            margin: 0;
-        }
-        .stat-value input:focus {
-            border-color: #0b2b3d;
-            background: #ffffff;
-            box-shadow: 0 0 0 3px rgba(11,43,61,0.1);
-        }
-        .stat-value input:focus:disabled {
-            border-color: #d0dce6;
-            box-shadow: none;
-        }
-        .btn-group {
-            display: flex;
-            gap: 6px;
-            margin-top: 12px;
-        }
-        .btn-group .plus-btn {
-            flex: 1;
-            background: #0b2b3d;
-            border: none;
-            color: white;
-            font-size: 1rem;
-            font-weight: 500;
-            padding: 8px 0;
-            border-radius: 20px;
-            cursor: pointer;
-            box-shadow: 0 2px 0 #04161f, 0 3px 8px -4px rgba(0,20,30,0.15);
-            transition: all 0.06s linear;
-            line-height: 1;
-        }
-        .btn-group .plus-btn:disabled {
-            opacity: 0.3;
-            transform: none !important;
-            box-shadow: 0 2px 0 #04161f, 0 3px 8px -4px rgba(0,20,30,0.15);
-            cursor: not-allowed;
-        }
-        .btn-group .plus-btn:active:not(:disabled) {
-            transform: translateY(2px);
-            box-shadow: 0 1px 0 #04161f, 0 2px 6px -4px rgba(0,20,30,0.12);
-        }
-        .btn-group .plus-btn:hover:not(:disabled) {
-            background: #13465e;
-        }
-        .hint {
-            margin-top: 8px;
-            font-size: 0.5rem;
-            color: #b0c7d5;
-            text-align: center;
-            letter-spacing: 0.02em;
-        }
-        .total-s {
-            background: #ffffffd0;
-            border-radius: 20px;
-            padding: 10px 18px;
-            display: flex;
-            justify-content: space-between;
-            font-size: 0.9rem;
-            color: #1f4962;
-            font-weight: 450;
-            box-shadow: 0 4px 12px -4px rgba(0,20,30,0.08);
-            backdrop-filter: blur(4px);
-            transition: opacity 0.3s;
-        }
-        .total-s.hidden {
-            opacity: 0.3;
-            pointer-events: none;
-        }
-        .total-s-value {
-            font-weight: 600;
-            color: #0c293b;
-        }
-        .total-s .manual-hint {
-            font-size: 0.65rem;
-            color: #6a8b9e;
-            font-weight: 400;
-        }
-        .create-btn {
-            background: #0b2b3d;
-            border: none;
-            color: white;
-            font-size: 1.1rem;
-            font-weight: 600;
-            padding: 14px 0;
-            border-radius: 30px;
-            cursor: pointer;
-            box-shadow: 0 4px 0 #04161f, 0 6px 16px -4px rgba(0,20,30,0.2);
-            transition: all 0.08s linear;
-            line-height: 1;
-            width: 100%;
-            letter-spacing: 0.03em;
-        }
-        .create-btn:active {
-            transform: translateY(4px);
-            box-shadow: 0 1px 0 #04161f, 0 4px 12px -4px rgba(0,20,30,0.15);
-        }
-        .create-btn:hover {
-            background: #13465e;
-        }
-        .create-btn:disabled {
-            opacity: 0.4;
-            transform: none !important;
-            box-shadow: 0 4px 0 #04161f, 0 6px 16px -4px rgba(0,20,30,0.2);
-            cursor: not-allowed;
-        }
-        .connection-status {
-            font-size: 0.7rem;
-            text-align: center;
-            padding: 4px 12px;
-            border-radius: 30px;
-            background: #eef4f8;
-            color: #3d5f72;
-        }
-        .connection-status.connected {
-            background: #d4edda;
-            color: #155724;
-        }
-        .connection-status.disconnected {
-            background: #f8d7da;
-            color: #721c24;
-        }
-        .version {
-            text-align: center;
-            font-size: 0.55rem;
-            color: #b0c7d5;
-            padding: 4px 0;
-            letter-spacing: 0.05em;
-        }
-        .peer-id-display {
-            font-size: 0.7rem;
-            text-align: center;
-            color: #3d5f72;
-            background: #eef4f8;
-            padding: 6px 12px;
-            border-radius: 30px;
-            font-family: monospace;
-            word-break: break-all;
-            user-select: text;
-            cursor: text;
-        }
-        .bottom-info {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
-        .role-badge {
-            font-size: 0.6rem;
-            text-align: center;
-            padding: 2px 12px;
-            border-radius: 30px;
-            background: #0b2b3d;
-            color: white;
-            display: inline-block;
-            margin: 0 auto;
-        }
-        .role-badge.host {
-            background: #28a745;
-        }
-        .role-badge.client {
-            background: #17a2b8;
-        }
-        .exit-btn {
-            background: #dc3545;
-            border: none;
-            color: white;
-            font-size: 0.9rem;
-            font-weight: 500;
-            padding: 8px 0;
-            border-radius: 20px;
-            cursor: pointer;
-            transition: 0.15s;
-            line-height: 1;
-            width: 100%;
-            margin-top: 8px;
-        }
-        .exit-btn:hover {
-            background: #c82333;
-        }
-        .exit-btn:disabled {
-            opacity: 0.4;
-            cursor: not-allowed;
-        }
-        .card .exit-btn {
-            margin-top: 12px;
-        }
-        @media (max-width: 700px) {
-            .main-layout {
-                flex-direction: column;
-            }
-            .right-col {
-                width: 100%;
-                max-height: 150px;
-            }
-            .container {
-                max-width: 100%;
-            }
-        }
-        @media (max-width: 480px) {
-            .container { max-width: 100%; }
-            .card { padding: 16px 12px 12px; }
-            .stat-value.price { font-size: 1.3rem; }
-            .stat-value input { width: 60px; font-size: 0.9rem; }
-            .btn-group .plus-btn { font-size: 0.85rem; padding: 6px 0; }
-            .total-s { font-size: 0.75rem; }
-            .create-btn { font-size: 0.95rem; padding: 12px 0; }
-            .exit-btn { font-size: 0.8rem; padding: 6px 0; }
-            .right-col { max-height: 120px; }
-            .user-list-item { font-size: 0.5rem; }
-        }
+        * { margin:0; padding:0; box-sizing:border-box; user-select:none; }
+        body { min-height:100vh; background:#eef4f8; display:flex; align-items:center; justify-content:center; font-family:system-ui, sans-serif; padding:20px; }
+        .container { display:flex; flex-direction:column; gap:16px; max-width:600px; width:100%; }
+        .main-layout { display:flex; gap:16px; align-items:flex-start; }
+        .left-col { flex:1; min-width:0; display:flex; flex-direction:column; gap:16px; }
+        .right-col { width:250px; flex-shrink:0; background:#fff; border-radius:24px; padding:14px 12px; box-shadow:0 6px 16px -6px rgba(0,20,30,0.10); max-height:400px; overflow-y:auto; }
+        .right-col-title { font-size:0.65rem; color:#3d5f72; font-weight:600; letter-spacing:0.03em; margin-bottom:8px; text-align:left; border-bottom:1px solid #f0f5f9; padding-bottom:6px; }
+        .right-col-title .count { color:#0b2b3d; font-weight:700; }
+        .user-list-item { display:flex; justify-content:space-between; align-items:center; font-size:0.6rem; padding:3px 0; border-bottom:1px solid #f5f8fa; font-family:monospace; gap:8px; }
+        .user-list-item .id { color:#3d5f72; white-space:nowrap; }
+        .user-list-item .id.me { color:#0b2b3d; font-weight:700; }
+        .user-list-item .stat { color:#0c293b; font-weight:600; white-space:nowrap; text-align:right; }
+        .user-list-item .badge { font-size:0.45rem; color:#28a745; font-weight:600; margin-left:4px; }
+        .user-list-empty { font-size:0.55rem; color:#b0c7d5; text-align:center; padding:10px 0; }
+        .card { background:#fff; border-radius:24px; padding:20px 16px 16px; box-shadow:0 6px 16px -6px rgba(0,20,30,0.10); position:relative; display:flex; flex-direction:column; min-width:0; transition:opacity 0.3s; }
+        .card.hidden { display:none; }
+        .reset-btn { position:absolute; top:6px; left:8px; background:transparent; border:none; font-size:0.85rem; color:#9aafbb; cursor:pointer; padding:2px 6px; border-radius:30px; transition:0.1s; font-weight:300; }
+        .reset-btn:hover { color:#2d4d61; background:#eef3f7; }
+        .stat-row { margin-top:6px; display:flex; flex-direction:column; gap:1px; }
+        .stat-item { display:flex; justify-content:space-between; align-items:baseline; padding:4px 0; border-bottom:1px solid #f0f5f9; }
+        .stat-item:last-child { border-bottom:none; }
+        .stat-label { color:#3d5f72; font-weight:450; font-size:0.7rem; letter-spacing:0.02em; text-transform:uppercase; }
+        .stat-value { font-weight:550; font-size:1rem; color:#0c293b; letter-spacing:-0.01em; }
+        .stat-value.price { font-size:1.6rem; font-weight:600; }
+        .stat-value input { width:70px; padding:4px 8px; border:2px solid #d0dce6; border-radius:8px; font-size:1rem; font-weight:500; color:#0c293b; background:#f8fafc; outline:none; transition:0.15s; font-family:inherit; text-align:right; -moz-appearance:textfield; }
+        .stat-value input:disabled { opacity:0.4; background:#eef4f8; cursor:not-allowed; }
+        .stat-value input::-webkit-inner-spin-button, .stat-value input::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
+        .stat-value input:focus { border-color:#0b2b3d; background:#fff; box-shadow:0 0 0 3px rgba(11,43,61,0.1); }
+        .stat-value input:focus:disabled { border-color:#d0dce6; box-shadow:none; }
+        .btn-group { display:flex; gap:6px; margin-top:12px; }
+        .btn-group .plus-btn { flex:1; background:#0b2b3d; border:none; color:#fff; font-size:1rem; font-weight:500; padding:8px 0; border-radius:20px; cursor:pointer; box-shadow:0 2px 0 #04161f,0 3px 8px -4px rgba(0,20,30,0.15); transition:all 0.06s linear; line-height:1; }
+        .btn-group .plus-btn:disabled { opacity:0.3; transform:none !important; box-shadow:0 2px 0 #04161f,0 3px 8px -4px rgba(0,20,30,0.15); cursor:not-allowed; }
+        .btn-group .plus-btn:active:not(:disabled) { transform:translateY(2px); box-shadow:0 1px 0 #04161f,0 2px 6px -4px rgba(0,20,30,0.12); }
+        .btn-group .plus-btn:hover:not(:disabled) { background:#13465e; }
+        .hint { margin-top:8px; font-size:0.5rem; color:#b0c7d5; text-align:center; letter-spacing:0.02em; }
+        .total-s { background:#ffffffd0; border-radius:20px; padding:10px 18px; display:flex; justify-content:space-between; font-size:0.9rem; color:#1f4962; font-weight:450; box-shadow:0 4px 12px -4px rgba(0,20,30,0.08); backdrop-filter:blur(4px); transition:opacity 0.3s; }
+        .total-s.hidden { opacity:0.3; pointer-events:none; }
+        .total-s-value { font-weight:600; color:#0c293b; }
+        .total-s .manual-hint { font-size:0.65rem; color:#6a8b9e; font-weight:400; }
+        .create-btn { background:#0b2b3d; border:none; color:#fff; font-size:1.1rem; font-weight:600; padding:14px 0; border-radius:30px; cursor:pointer; box-shadow:0 4px 0 #04161f,0 6px 16px -4px rgba(0,20,30,0.2); transition:all 0.08s linear; line-height:1; width:100%; letter-spacing:0.03em; }
+        .create-btn:active { transform:translateY(4px); box-shadow:0 1px 0 #04161f,0 4px 12px -4px rgba(0,20,30,0.15); }
+        .create-btn:hover { background:#13465e; }
+        .create-btn:disabled { opacity:0.4; transform:none !important; box-shadow:0 4px 0 #04161f,0 6px 16px -4px rgba(0,20,30,0.2); cursor:not-allowed; }
+        .connection-status { font-size:0.7rem; text-align:center; padding:4px 12px; border-radius:30px; background:#eef4f8; color:#3d5f72; }
+        .connection-status.connected { background:#d4edda; color:#155724; }
+        .connection-status.disconnected { background:#f8d7da; color:#721c24; }
+        .version { text-align:center; font-size:0.55rem; color:#b0c7d5; padding:4px 0; letter-spacing:0.05em; }
+        .peer-id-display { font-size:0.7rem; text-align:center; color:#3d5f72; background:#eef4f8; padding:6px 12px; border-radius:30px; font-family:monospace; word-break:break-all; user-select:text; cursor:text; }
+        .bottom-info { display:flex; flex-direction:column; gap:6px; }
+        .role-badge { font-size:0.6rem; text-align:center; padding:2px 12px; border-radius:30px; background:#0b2b3d; color:#fff; display:inline-block; margin:0 auto; }
+        .role-badge.host { background:#28a745; }
+        .role-badge.client { background:#17a2b8; }
+        .exit-btn { background:#dc3545; border:none; color:#fff; font-size:0.9rem; font-weight:500; padding:8px 0; border-radius:20px; cursor:pointer; transition:0.15s; line-height:1; width:100%; margin-top:8px; }
+        .exit-btn:hover { background:#c82333; }
+        .exit-btn:disabled { opacity:0.4; cursor:not-allowed; }
+        .card .exit-btn { margin-top:12px; }
+        @media (max-width:700px) { .main-layout { flex-direction:column; } .right-col { width:100%; max-height:150px; } .container { max-width:100%; } }
+        @media (max-width:480px) { .container { max-width:100%; } .card { padding:16px 12px 12px; } .stat-value.price { font-size:1.3rem; } .stat-value input { width:60px; font-size:0.9rem; } .btn-group .plus-btn { font-size:0.85rem; padding:6px 0; } .total-s { font-size:0.75rem; } .create-btn { font-size:0.95rem; padding:12px 0; } .exit-btn { font-size:0.8rem; padding:6px 0; } .right-col { max-height:120px; } .user-list-item { font-size:0.5rem; } }
     </style>
 </head>
 <body>
 <div class="container">
     <div class="connection-status" id="connectionStatus">⏳ Подключение...</div>
-    <div style="text-align: center;">
-        <span class="role-badge" id="roleBadge">⏳</span>
-    </div>
+    <div style="text-align:center;"><span class="role-badge" id="roleBadge">⏳</span></div>
 
     <div class="main-layout">
         <div class="left-col">
             <button class="create-btn" id="createBtn">➕ Создать счётчик</button>
-
             <div class="card hidden" id="card">
                 <button class="reset-btn" id="resetBtn">↺</button>
-
                 <div class="stat-row">
-                    <div class="stat-item">
-                        <span class="stat-label">статы</span>
-                        <span class="stat-value">
-                            <input type="number" id="xInput" value="0" min="0" step="1" disabled>
-                        </span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-label">цена</span>
-                        <span class="stat-value price" id="priceDisplay">1</span>
-                    </div>
+                    <div class="stat-item"><span class="stat-label">статы</span><span class="stat-value"><input type="number" id="xInput" value="0" min="0" step="1" disabled></span></div>
+                    <div class="stat-item"><span class="stat-label">цена</span><span class="stat-value price" id="priceDisplay">1</span></div>
                 </div>
-
                 <div class="btn-group">
                     <button class="plus-btn" data-delta="1" disabled>+1</button>
                     <button class="plus-btn" data-delta="10" disabled>+10</button>
                     <button class="plus-btn" data-delta="50" disabled>+50</button>
                 </div>
-
                 <div class="hint">счётчик</div>
-                
                 <button class="exit-btn" id="exitBtn">🚪 Выйти</button>
             </div>
-
             <div class="total-s hidden" id="totalSBlock">
                 <span>📊 Текущее S</span>
-                <span>
-                    <span class="total-s-value" id="totalS">0</span>
-                    <span class="manual-hint">(авто)</span>
-                </span>
+                <span><span class="total-s-value" id="totalS">0</span><span class="manual-hint">(авто)</span></span>
             </div>
         </div>
-
         <div class="right-col" id="userList">
-            <div class="right-col-title" id="userListTitle">👥 Участники (<span class="count" id="userCount">0</span>)</div>
-            <div id="userListContent">
-                <div class="user-list-empty">Нет участников</div>
-            </div>
+            <div class="right-col-title">👥 Участники (<span class="count" id="userCount">0</span>)</div>
+            <div id="userListContent"><div class="user-list-empty">Нет участников</div></div>
         </div>
     </div>
 
     <div class="bottom-info">
         <div class="peer-id-display" id="peerIdDisplay">⏳ Получение Peer ID...</div>
-        <div class="version" id="versionDisplay">v30</div>
+        <div class="version" id="versionDisplay">v24</div>
     </div>
 </div>
 
 <script>
-    (function() {
-        const VERSION = 'v30';
-        document.getElementById('versionDisplay').textContent = VERSION;
+(function() {
+    const VERSION = 'v24';
+    document.getElementById('versionDisplay').textContent = VERSION;
 
-        let myPeerId = null;
-        let allCounters = {};
-        let allConnected = {};
-        let connections = [];
-        let isCreated = false;
-        let myX = 0;
-        let isHost = false;
-        let hostPeerId = null;
-        let isHostConfirmed = false;
-        let isExited = false;
+    let myPeerId = null;
+    let allCounters = {};
+    let allConnected = {};
+    let connections = [];
+    let isCreated = false;
+    let myX = 0;
+    let isHost = false;
+    let hostPeerId = null;
+    let isHostConfirmed = false;
+    let isExited = false;
+    let peer = null;
+    let currentServerIndex = 0;
 
-        // ==========================================
-        //  ПЕРЕДОВОЙ PEERJS С TURN-СЕРВЕРАМИ
-        //  Для обхода NAT и корпоративных сетей
-        // ==========================================
-        const peer = new Peer(undefined, {
-            host: 'peerjs-server.herokuapp.com',
-            port: 443,
-            secure: true,
+    // ==========================================
+    // СПИСОК СЕРВЕРОВ (если один не работает - пробуем следующий)
+    // ==========================================
+    const servers = [
+        { host: '0.peerjs.com', port: 443, secure: true },
+        { host: 'peerjs-server.herokuapp.com', port: 443, secure: true },
+        { host: 'peerjs-server.cyclic.app', port: 443, secure: true }
+    ];
+
+    function createPeer(serverIndex) {
+        if (peer) {
+            try { peer.destroy(); } catch(e) {}
+        }
+        
+        const server = servers[serverIndex];
+        console.log(`🔗 Попытка подключения к ${server.host}...`);
+        
+        return new Peer(undefined, {
+            host: server.host,
+            port: server.port,
+            secure: server.secure,
+            config: {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    { urls: 'stun:stun2.l.google.com:19302' },
+                    { urls: 'stun:stun3.l.google.com:19302' },
+                    { urls: 'stun:stun4.l.google.com:19302' }
+                ]
+            }
         });
+    }
 
-        const createBtn = document.getElementById('createBtn');
-        const card = document.getElementById('card');
-        const totalSBlock = document.getElementById('totalSBlock');
-        const peerIdDisplay = document.getElementById('peerIdDisplay');
-        const connectionStatus = document.getElementById('connectionStatus');
-        const roleBadge = document.getElementById('roleBadge');
-        const xInput = document.getElementById('xInput');
-        const priceDisplay = document.getElementById('priceDisplay');
-        const totalSEl = document.getElementById('totalS');
-        const resetBtn = document.getElementById('resetBtn');
-        const exitBtn = document.getElementById('exitBtn');
-        const plusBtns = document.querySelectorAll('.plus-btn');
-        const userListContent = document.getElementById('userListContent');
-        const userCount = document.getElementById('userCount');
+    function initPeer() {
+        peer = createPeer(currentServerIndex);
+        setupPeerEvents();
+    }
 
-        const A = 5;
-
-        function getS() {
-            let sum = 0;
-            for (const key in allCounters) {
-                if (allCounters[key].online) {
-                    sum += allCounters[key].x || 0;
-                }
-            }
-            return sum;
-        }
-
-        function getN() {
-            let count = 0;
-            for (const key in allCounters) {
-                if (allCounters[key].online) count++;
-            }
-            return count;
-        }
-
-        function formatNumber(num) {
-            if (!isFinite(num)) return '∞';
-            return Math.round(num).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-        }
-
-        function computePrice(xVal, S, n) {
-            if (S <= 0 || n <= 0) return 1;
-            const raw = (n * xVal * xVal) / (A * S);
-            const rounded = Math.round(raw);
-            return rounded < 1 ? 1 : rounded;
-        }
-
-        function getShortId(id) {
-            return id.slice(0, 8);
-        }
-
-        function updateUI() {
-            const S = getS();
-            const n = getN();
-
-            totalSEl.textContent = formatNumber(S);
-            userCount.textContent = n;
-
-            const myCounter = allCounters[myPeerId];
-            if (myCounter && myCounter.online) {
-                myX = myCounter.x || 0;
-                xInput.value = myX;
-                const price = computePrice(myX, S, n);
-                priceDisplay.textContent = formatNumber(price);
-            } else {
-                xInput.value = 0;
-                priceDisplay.textContent = '1';
-            }
-
-            updateUserList();
-        }
-
-        function updateUserList() {
-            const keys = Object.keys(allCounters);
-            if (keys.length === 0) {
-                userListContent.innerHTML = '<div class="user-list-empty">Нет участников</div>';
-                return;
-            }
-
-            let html = '';
-            for (const key of keys) {
-                if (allCounters[key].online) {
-                    const shortId = getShortId(key);
-                    const stat = allCounters[key].x || 0;
-                    const isMe = (key === myPeerId);
-                    html += `<div class="user-list-item">
-                        <span class="id${isMe ? ' me' : ''}">${shortId}${isMe ? ' <span class="badge">(Вы)</span>' : ''}</span>
-                        <span class="stat">${formatNumber(stat)}</span>
-                    </div>`;
-                }
-            }
-            userListContent.innerHTML = html;
-        }
-
-        function exitUser() {
-            if (!isCreated) return;
-            if (isExited) return;
-            
-            console.log('🚪 Пользователь выходит...');
-            isExited = true;
-            
-            if (allCounters[myPeerId]) {
-                delete allCounters[myPeerId];
-            }
-            
-            if (isHost) {
-                broadcastToAll({
-                    type: 'full_state',
-                    counters: allCounters
-                });
-            } else {
-                sendToHost({
-                    type: 'client_leave',
-                    userId: myPeerId
-                });
-            }
-            
-            isCreated = false;
-            myX = 0;
-            createBtn.disabled = false;
-            createBtn.textContent = '➕ Создать счётчик';
-            card.classList.add('hidden');
-            totalSBlock.classList.add('hidden');
-            xInput.disabled = true;
-            xInput.value = 0;
-            plusBtns.forEach(btn => btn.disabled = true);
-            exitBtn.disabled = true;
-            priceDisplay.textContent = '1';
-            
-            updateUI();
-            console.log('✅ Выполнен выход');
-        }
-
-        function becomeHost() {
-            isHost = true;
-            isHostConfirmed = true;
-            hostPeerId = myPeerId;
-            roleBadge.textContent = '👑 ХОСТ';
-            roleBadge.className = 'role-badge host';
-            console.log('👑 Я СТАЛ ХОСТОМ!');
-            
-            allConnected[myPeerId] = { online: true };
-            
-            broadcastToAll({
-                type: 'host_is',
-                hostId: myPeerId
-            });
-        }
-
-        function becomeClient(hostId) {
-            isHost = false;
-            isHostConfirmed = true;
-            hostPeerId = hostId;
-            roleBadge.textContent = '👤 КЛИЕНТ';
-            roleBadge.className = 'role-badge client';
-            console.log('👤 Я СТАЛ КЛИЕНТОМ, хост:', hostId);
-            
-            allConnected[myPeerId] = { online: true };
-            
-            sendToHost({
-                type: 'client_connected',
-                userId: myPeerId
-            });
-        }
-
-        function broadcastToAll(data) {
-            connections.forEach(conn => {
-                if (conn.open) {
-                    conn.send(data);
-                }
-            });
-        }
-
-        function sendToHost(data) {
-            const hostConn = connections.find(c => c.peer === hostPeerId);
-            if (hostConn && hostConn.open) {
-                hostConn.send(data);
-            } else {
-                console.log('⚠️ Нет соединения с хостом');
-            }
-        }
-
-        function receiveData(data, senderPeerId) {
-            if (data.type === 'full_state') {
-                allCounters = data.counters || {};
-                if (allCounters[myPeerId]) {
-                    allCounters[myPeerId].online = true;
-                }
-                updateUI();
-            }
-            else if (data.type === 'client_update') {
-                if (isHost) {
-                    const { userId, x } = data;
-                    if (allCounters[userId]) {
-                        allCounters[userId].x = x || 0;
-                        allCounters[userId].online = true;
-                        broadcastToAll({
-                            type: 'full_state',
-                            counters: allCounters
-                        });
-                        updateUI();
-                    }
-                }
-            }
-            else if (data.type === 'client_connected') {
-                if (isHost) {
-                    const { userId } = data;
-                    allConnected[userId] = { online: true };
-                    console.log(`🔗 Клиент ${userId} подключился (без счётчика)`);
-                }
-            }
-            else if (data.type === 'client_create_counter') {
-                if (isHost) {
-                    const { userId } = data;
-                    if (!allCounters[userId]) {
-                        allCounters[userId] = { x: 0, online: true };
-                        console.log(`✅ Клиент ${userId} создал счётчик!`);
-                        
-                        const conn = connections.find(c => c.peer === senderPeerId);
-                        if (conn && conn.open) {
-                            conn.send({
-                                type: 'full_state',
-                                counters: allCounters
-                            });
-                        }
-                        
-                        broadcastToAll({
-                            type: 'full_state',
-                            counters: allCounters
-                        });
-                        updateUI();
-                    }
-                }
-            }
-            else if (data.type === 'client_leave') {
-                if (isHost) {
-                    const { userId } = data;
-                    if (allCounters[userId]) {
-                        console.log(`👋 Клиент ${userId} вышел (удалён из счётчиков)`);
-                        delete allCounters[userId];
-                        broadcastToAll({
-                            type: 'full_state',
-                            counters: allCounters
-                        });
-                        updateUI();
-                    }
-                    if (allConnected[userId]) {
-                        delete allConnected[userId];
-                    }
-                }
-            }
-            else if (data.type === 'who_is_host') {
-                if (isHost) {
-                    const conn = connections.find(c => c.peer === senderPeerId);
-                    if (conn && conn.open) {
-                        conn.send({
-                            type: 'host_is',
-                            hostId: myPeerId
-                        });
-                    }
-                }
-            }
-            else if (data.type === 'host_is') {
-                if (!isHostConfirmed) {
-                    const { hostId } = data;
-                    if (hostId === myPeerId) {
-                        becomeHost();
-                    } else {
-                        becomeClient(hostId);
-                    }
-                }
-            }
-            else if (data.type === 'client_reset') {
-                if (isHost) {
-                    const { userId } = data;
-                    if (allCounters[userId]) {
-                        allCounters[userId].x = 0;
-                        broadcastToAll({
-                            type: 'full_state',
-                            counters: allCounters
-                        });
-                        updateUI();
-                    }
-                }
-            }
-            else if (data.type === 'host_reset_all') {
-                if (!isHost) {
-                    allCounters = {};
-                    allCounters[myPeerId] = { x: 0, online: true };
-                    sendToHost({
-                        type: 'client_update',
-                        userId: myPeerId,
-                        x: myX
-                    });
-                    updateUI();
-                }
-            }
-        }
-
-        function setupConnection(conn) {
-            conn.on('open', () => {
-                connectionStatus.textContent = '🟢 Связано с ' + conn.peer.slice(0, 8);
-                connectionStatus.className = 'connection-status connected';
-                
-                if (isHost && isHostConfirmed) {
-                    conn.send({
-                        type: 'full_state',
-                        counters: allCounters
-                    });
-                    conn.send({
-                        type: 'host_is',
-                        hostId: myPeerId
-                    });
-                } else if (!isHostConfirmed) {
-                    conn.send({
-                        type: 'who_is_host'
-                    });
-                }
-                
-                updateUI();
-            });
-
-            conn.on('data', (data) => {
-                receiveData(data, conn.peer);
-            });
-
-            conn.on('close', () => {
-                connections = connections.filter(c => c !== conn);
-                connectionStatus.textContent = '🟡 Соединение потеряно';
-                connectionStatus.className = 'connection-status disconnected';
-                updateUI();
-            });
-        }
-
-        function connectToPeer(peerId) {
-            if (connections.some(c => c.peer === peerId)) return;
-            if (peerId === myPeerId) return;
-
-            console.log(`🔗 Подключение к ${peerId}`);
-            const conn = peer.connect(peerId);
-            connections.push(conn);
-            setupConnection(conn);
-            connectionStatus.textContent = '🔄 Подключение к ' + peerId.slice(0, 8) + '...';
-        }
-
-        function createCounter() {
-            if (isCreated) return;
-            if (isExited) {
-                isExited = false;
-            }
-
-            if (isHostConfirmed) {
-                // Уже определились
-            } else {
-                if (connections.length > 0) {
-                    connections.forEach(conn => {
-                        if (conn.open) {
-                            conn.send({
-                                type: 'who_is_host'
-                            });
-                        }
-                    });
-                    setTimeout(() => {
-                        if (!isHostConfirmed) {
-                            becomeHost();
-                            finishCreateCounter();
-                        }
-                    }, 1000);
-                    return;
-                } else {
-                    becomeHost();
-                }
-            }
-
-            finishCreateCounter();
-        }
-
-        function finishCreateCounter() {
-            if (isCreated) return;
-            
-            if (!allCounters[myPeerId]) {
-                allCounters[myPeerId] = { x: 0, online: true };
-                console.log('✅ Счётчик создан!');
-            }
-            
-            if (isHost) {
-                broadcastToAll({
-                    type: 'full_state',
-                    counters: allCounters
-                });
-            } else {
-                sendToHost({
-                    type: 'client_create_counter',
-                    userId: myPeerId
-                });
-                sendToHost({
-                    type: 'client_update',
-                    userId: myPeerId,
-                    x: myX
-                });
-            }
-
-            isCreated = true;
-            createBtn.disabled = true;
-            createBtn.textContent = '✅ Счётчик создан';
-            card.classList.remove('hidden');
-            totalSBlock.classList.remove('hidden');
-            xInput.disabled = false;
-            plusBtns.forEach(btn => btn.disabled = false);
-            exitBtn.disabled = false;
-
-            updateUI();
-        }
-
-        function setX(newX) {
-            if (!isCreated) return;
-            if (newX < 0) newX = 0;
-
-            myX = newX;
-            
-            if (allCounters[myPeerId]) {
-                allCounters[myPeerId].x = myX;
-                allCounters[myPeerId].online = true;
-            }
-
-            if (isHost) {
-                broadcastToAll({
-                    type: 'full_state',
-                    counters: allCounters
-                });
-            } else {
-                sendToHost({
-                    type: 'client_update',
-                    userId: myPeerId,
-                    x: myX
-                });
-            }
-
-            updateUI();
-        }
-
-        function resetCounter() {
-            if (!isCreated) return;
-            
-            if (isHost) {
-                for (const key in allCounters) {
-                    allCounters[key].x = 0;
-                }
-                broadcastToAll({
-                    type: 'full_state',
-                    counters: allCounters
-                });
-                broadcastToAll({
-                    type: 'host_reset_all'
-                });
-                updateUI();
-                console.log('🔄 Хост сбросил всех');
-            } else {
-                myX = 0;
-                if (allCounters[myPeerId]) {
-                    allCounters[myPeerId].x = 0;
-                }
-                sendToHost({
-                    type: 'client_reset',
-                    userId: myPeerId
-                });
-                sendToHost({
-                    type: 'client_update',
-                    userId: myPeerId,
-                    x: 0
-                });
-                updateUI();
-                console.log('🔄 Клиент сбросил себя');
-            }
-        }
-
+    function setupPeerEvents() {
         peer.on('open', (id) => {
             myPeerId = id;
-            connectionStatus.textContent = '🟢 Подключено!';
+            connectionStatus.textContent = '🟢 Подключено! (' + servers[currentServerIndex].host + ')';
             connectionStatus.className = 'connection-status connected';
-
             peerIdDisplay.textContent = '🆔 ' + id;
             peerIdDisplay.style.userSelect = 'text';
 
@@ -993,35 +193,250 @@
 
         peer.on('error', (err) => {
             console.error('Peer error:', err);
-            if (!err.message.includes('unavailable')) {
-                connectionStatus.textContent = '❌ Ошибка: ' + err.message;
+            
+            // Если ошибка подключения к серверу - пробуем следующий
+            if (err.message.includes('unavailable') || err.message.includes('Could not connect')) {
+                connectionStatus.textContent = '🔄 Смена сервера...';
+                connectionStatus.className = 'connection-status';
+                
+                currentServerIndex++;
+                if (currentServerIndex < servers.length) {
+                    setTimeout(() => {
+                        console.log(`🔄 Переключение на ${servers[currentServerIndex].host}`);
+                        initPeer();
+                    }, 1000);
+                } else {
+                    connectionStatus.textContent = '❌ Все серверы недоступны. Включите VPN.';
+                    connectionStatus.className = 'connection-status disconnected';
+                }
+            } else if (!err.message.includes('unavailable') && !err.message.includes('Could not connect')) {
+                connectionStatus.textContent = '⚠️ ' + err.message.slice(0, 30);
                 connectionStatus.className = 'connection-status disconnected';
             }
         });
+    }
 
-        createBtn.addEventListener('click', createCounter);
+    // ==========================================
+    // ОСТАЛЬНАЯ ЛОГИКА (без изменений)
+    // ==========================================
+    const createBtn = document.getElementById('createBtn');
+    const card = document.getElementById('card');
+    const totalSBlock = document.getElementById('totalSBlock');
+    const peerIdDisplay = document.getElementById('peerIdDisplay');
+    const connectionStatus = document.getElementById('connectionStatus');
+    const roleBadge = document.getElementById('roleBadge');
+    const xInput = document.getElementById('xInput');
+    const priceDisplay = document.getElementById('priceDisplay');
+    const totalSEl = document.getElementById('totalS');
+    const resetBtn = document.getElementById('resetBtn');
+    const exitBtn = document.getElementById('exitBtn');
+    const plusBtns = document.querySelectorAll('.plus-btn');
+    const userListContent = document.getElementById('userListContent');
+    const userCount = document.getElementById('userCount');
 
-        xInput.addEventListener('input', () => {
-            if (!isCreated) return;
-            let val = parseInt(xInput.value, 10);
-            if (isNaN(val) || val < 0) val = 0;
-            setX(val);
+    const A = 5;
+
+    function getS() { let sum=0; for(const key in allCounters){ if(allCounters[key].online) sum += allCounters[key].x||0; } return sum; }
+    function getN() { let count=0; for(const key in allCounters){ if(allCounters[key].online) count++; } return count; }
+    function formatNumber(num) { if(!isFinite(num)) return '∞'; return Math.round(num).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
+    function computePrice(xVal, S, n) { if(S<=0||n<=0) return 1; const raw=(n*xVal*xVal)/(A*S); const rounded=Math.round(raw); return rounded<1?1:rounded; }
+    function getShortId(id) { return id.slice(0,8); }
+
+    function updateUI() {
+        const S=getS(); const n=getN();
+        totalSEl.textContent=formatNumber(S);
+        userCount.textContent=n;
+        const myCounter=allCounters[myPeerId];
+        if(myCounter && myCounter.online){ myX=myCounter.x||0; xInput.value=myX; const price=computePrice(myX,S,n); priceDisplay.textContent=formatNumber(price); }
+        else { xInput.value=0; priceDisplay.textContent='1'; }
+        updateUserList();
+    }
+
+    function updateUserList() {
+        const keys=Object.keys(allCounters);
+        if(keys.length===0){ userListContent.innerHTML='<div class="user-list-empty">Нет участников</div>'; return; }
+        let html='';
+        for(const key of keys){
+            if(allCounters[key].online){
+                const shortId=getShortId(key);
+                const stat=allCounters[key].x||0;
+                const isMe=(key===myPeerId);
+                html += `<div class="user-list-item"><span class="id${isMe?' me':''}">${shortId}${isMe?' <span class="badge">(Вы)</span>':''}</span><span class="stat">${formatNumber(stat)}</span></div>`;
+            }
+        }
+        userListContent.innerHTML=html;
+    }
+
+    function exitUser() {
+        if(!isCreated||isExited) return;
+        isExited=true;
+        if(allCounters[myPeerId]) delete allCounters[myPeerId];
+        if(isHost) broadcastToAll({type:'full_state', counters:allCounters});
+        else sendToHost({type:'client_leave', userId:myPeerId});
+        isCreated=false; myX=0;
+        createBtn.disabled=false; createBtn.textContent='➕ Создать счётчик';
+        card.classList.add('hidden'); totalSBlock.classList.add('hidden');
+        xInput.disabled=true; xInput.value=0;
+        plusBtns.forEach(btn=>btn.disabled=true);
+        exitBtn.disabled=true; priceDisplay.textContent='1';
+        updateUI();
+    }
+
+    function becomeHost() {
+        isHost=true; isHostConfirmed=true; hostPeerId=myPeerId;
+        roleBadge.textContent='👑 ХОСТ'; roleBadge.className='role-badge host';
+        allConnected[myPeerId]={online:true};
+        broadcastToAll({type:'host_is', hostId:myPeerId});
+    }
+
+    function becomeClient(hostId) {
+        isHost=false; isHostConfirmed=true; hostPeerId=hostId;
+        roleBadge.textContent='👤 КЛИЕНТ'; roleBadge.className='role-badge client';
+        allConnected[myPeerId]={online:true};
+        sendToHost({type:'client_connected', userId:myPeerId});
+    }
+
+    function broadcastToAll(data){ connections.forEach(conn=>{ if(conn.open) conn.send(data); }); }
+    function sendToHost(data){ const hostConn=connections.find(c=>c.peer===hostPeerId); if(hostConn&&hostConn.open) hostConn.send(data); else console.log('⚠️ Нет соединения с хостом'); }
+
+    function receiveData(data, senderPeerId) {
+        if(data.type==='full_state'){ allCounters=data.counters||{}; if(allCounters[myPeerId]) allCounters[myPeerId].online=true; updateUI(); }
+        else if(data.type==='client_update'){
+            if(isHost){ const {userId,x}=data; if(allCounters[userId]){ allCounters[userId].x=x||0; allCounters[userId].online=true; broadcastToAll({type:'full_state', counters:allCounters}); updateUI(); } }
+        }
+        else if(data.type==='client_connected'){
+            if(isHost){ const {userId}=data; allConnected[userId]={online:true}; }
+        }
+        else if(data.type==='client_create_counter'){
+            if(isHost){
+                const {userId}=data;
+                if(!allCounters[userId]){
+                    allCounters[userId]={x:0, online:true};
+                    const conn=connections.find(c=>c.peer===senderPeerId);
+                    if(conn&&conn.open) conn.send({type:'full_state', counters:allCounters});
+                    broadcastToAll({type:'full_state', counters:allCounters});
+                    updateUI();
+                }
+            }
+        }
+        else if(data.type==='client_leave'){
+            if(isHost){
+                const {userId}=data;
+                if(allCounters[userId]){ delete allCounters[userId]; broadcastToAll({type:'full_state', counters:allCounters}); updateUI(); }
+                if(allConnected[userId]) delete allConnected[userId];
+            }
+        }
+        else if(data.type==='who_is_host'){
+            if(isHost){ const conn=connections.find(c=>c.peer===senderPeerId); if(conn&&conn.open) conn.send({type:'host_is', hostId:myPeerId}); }
+        }
+        else if(data.type==='host_is'){
+            if(!isHostConfirmed){
+                const {hostId}=data;
+                if(hostId===myPeerId) becomeHost();
+                else becomeClient(hostId);
+            }
+        }
+        else if(data.type==='client_reset'){
+            if(isHost){ const {userId}=data; if(allCounters[userId]){ allCounters[userId].x=0; broadcastToAll({type:'full_state', counters:allCounters}); updateUI(); } }
+        }
+        else if(data.type==='host_reset_all'){
+            if(!isHost){ allCounters={}; allCounters[myPeerId]={x:0, online:true}; sendToHost({type:'client_update', userId:myPeerId, x:myX}); updateUI(); }
+        }
+    }
+
+    function setupConnection(conn) {
+        conn.on('open', ()=>{
+            connectionStatus.textContent='🟢 Связано с '+conn.peer.slice(0,8);
+            connectionStatus.className='connection-status connected';
+            if(isHost&&isHostConfirmed){ conn.send({type:'full_state', counters:allCounters}); conn.send({type:'host_is', hostId:myPeerId}); }
+            else if(!isHostConfirmed){ conn.send({type:'who_is_host'}); }
+            updateUI();
         });
-
-        plusBtns.forEach(btn => {
-            btn.addEventListener('click', () => {
-                if (!isCreated) return;
-                const delta = parseInt(btn.dataset.delta, 10);
-                setX(myX + delta);
-            });
+        conn.on('data', (data)=>{ receiveData(data, conn.peer); });
+        conn.on('close', ()=>{
+            connections=connections.filter(c=>c!==conn);
+            connectionStatus.textContent='🟡 Соединение потеряно';
+            connectionStatus.className='connection-status disconnected';
+            updateUI();
         });
+    }
 
-        resetBtn.addEventListener('click', resetCounter);
-        exitBtn.addEventListener('click', exitUser);
+    function connectToPeer(peerId) {
+        if(connections.some(c=>c.peer===peerId)) return;
+        if(peerId===myPeerId) return;
+        const conn=peer.connect(peerId);
+        connections.push(conn);
+        setupConnection(conn);
+        connectionStatus.textContent='🔄 Подключение к '+peerId.slice(0,8)+'...';
+    }
 
-        console.log('📊 Версия:', VERSION);
-        console.log('🔧 TURN-сервера включены для обхода NAT');
-    })();
+    function createCounter() {
+        if(isCreated) return;
+        if(isExited) isExited=false;
+        if(isHostConfirmed){}
+        else {
+            if(connections.length>0){
+                connections.forEach(conn=>{ if(conn.open) conn.send({type:'who_is_host'}); });
+                setTimeout(()=>{ if(!isHostConfirmed){ becomeHost(); finishCreateCounter(); } }, 1000);
+                return;
+            } else { becomeHost(); }
+        }
+        finishCreateCounter();
+    }
+
+    function finishCreateCounter() {
+        if(isCreated) return;
+        if(!allCounters[myPeerId]){ allCounters[myPeerId]={x:0, online:true}; }
+        if(isHost){ broadcastToAll({type:'full_state', counters:allCounters}); }
+        else { sendToHost({type:'client_create_counter', userId:myPeerId}); sendToHost({type:'client_update', userId:myPeerId, x:myX}); }
+        isCreated=true;
+        createBtn.disabled=true; createBtn.textContent='✅ Счётчик создан';
+        card.classList.remove('hidden'); totalSBlock.classList.remove('hidden');
+        xInput.disabled=false; plusBtns.forEach(btn=>btn.disabled=false); exitBtn.disabled=false;
+        updateUI();
+    }
+
+    function setX(newX) {
+        if(!isCreated) return;
+        if(newX<0) newX=0;
+        myX=newX;
+        if(allCounters[myPeerId]){ allCounters[myPeerId].x=myX; allCounters[myPeerId].online=true; }
+        if(isHost){ broadcastToAll({type:'full_state', counters:allCounters}); }
+        else { sendToHost({type:'client_update', userId:myPeerId, x:myX}); }
+        updateUI();
+    }
+
+    function resetCounter() {
+        if(!isCreated) return;
+        if(isHost){
+            for(const key in allCounters){ allCounters[key].x=0; }
+            broadcastToAll({type:'full_state', counters:allCounters});
+            broadcastToAll({type:'host_reset_all'});
+            updateUI();
+        } else {
+            myX=0;
+            if(allCounters[myPeerId]) allCounters[myPeerId].x=0;
+            sendToHost({type:'client_reset', userId:myPeerId});
+            sendToHost({type:'client_update', userId:myPeerId, x:0});
+            updateUI();
+        }
+    }
+
+    // ==========================================
+    // ЗАПУСК
+    // ==========================================
+    createBtn.addEventListener('click', createCounter);
+    xInput.addEventListener('input', ()=>{ if(!isCreated) return; let val=parseInt(xInput.value,10); if(isNaN(val)||val<0) val=0; setX(val); });
+    plusBtns.forEach(btn=>{ btn.addEventListener('click', ()=>{ if(!isCreated) return; const delta=parseInt(btn.dataset.delta,10); setX(myX+delta); }); });
+    resetBtn.addEventListener('click', resetCounter);
+    exitBtn.addEventListener('click', exitUser);
+
+    // ЗАПУСКАЕМ ПЕРВЫЙ СЕРВЕР
+    initPeer();
+
+    console.log('📊 Версия:', VERSION);
+    console.log('🔄 Автоматическая смена сервера при ошибке');
+})();
 </script>
 </body>
 </html>
