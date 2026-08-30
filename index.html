@@ -276,6 +276,22 @@
             flex-direction: column;
             gap: 6px;
         }
+        .role-badge {
+            font-size: 0.6rem;
+            text-align: center;
+            padding: 2px 12px;
+            border-radius: 30px;
+            background: #0b2b3d;
+            color: white;
+            display: inline-block;
+            margin: 0 auto;
+        }
+        .role-badge.host {
+            background: #28a745;
+        }
+        .role-badge.client {
+            background: #17a2b8;
+        }
         @media (max-width: 480px) {
             .container { max-width: 100%; }
             .card { padding: 16px 12px 12px; }
@@ -290,6 +306,9 @@
 <body>
 <div class="container">
     <div class="connection-status" id="connectionStatus">⏳ Подключение...</div>
+    <div style="text-align: center;">
+        <span class="role-badge" id="roleBadge">⏳</span>
+    </div>
     
     <button class="create-btn" id="createBtn">➕ Создать счётчик</button>
 
@@ -333,25 +352,28 @@
 
     <div class="bottom-info">
         <div class="peer-id-display" id="peerIdDisplay">⏳ Получение Peer ID...</div>
-        <div class="version" id="versionDisplay">v.0.0.8</div>
+        <div class="version" id="versionDisplay">v.0.0.9</div>
     </div>
 </div>
 
 <script>
     (function() {
-        const VERSION = 'v.0.0.8';
+        const VERSION = 'v.0.0.9';
         document.getElementById('versionDisplay').textContent = VERSION;
 
-        // Уникальный ID этого пользователя
         const myId = Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-
-        // Все данные
-        let allCounters = {};
+        
+        // Состояние
+        let allCounters = {}; // { userId: { x, online, lastSeen } }
         let connections = [];
         let myPeerId = null;
         let isCreated = false;
         let myX = 0;
-        let allPeers = new Set(); // Все известные пиры
+        let isHost = false;
+        let hostPeerId = null;
+        let syncInterval = null;
+        let lastSyncTime = Date.now();
+        let connectionTimeout = null;
 
         const peer = new Peer(undefined, {
             host: '0.peerjs.com',
@@ -365,6 +387,7 @@
         const nDisplay = document.getElementById('nDisplay');
         const peerIdDisplay = document.getElementById('peerIdDisplay');
         const connectionStatus = document.getElementById('connectionStatus');
+        const roleBadge = document.getElementById('roleBadge');
         const xInput = document.getElementById('xInput');
         const priceDisplay = document.getElementById('priceDisplay');
         const totalSEl = document.getElementById('totalS');
@@ -372,11 +395,16 @@
         const plusBtns = document.querySelectorAll('.plus-btn');
 
         const A = 5;
+        const SYNC_INTERVAL = 50; // мс
+        const TIMEOUT_MS = 1000; // мс
 
+        // --- Формула ---
         function getS() {
             let sum = 0;
             for (const key in allCounters) {
-                sum += allCounters[key].x || 0;
+                if (allCounters[key].online) {
+                    sum += allCounters[key].x || 0;
+                }
             }
             return sum;
         }
@@ -401,6 +429,7 @@
             return rounded < 1 ? 1 : rounded;
         }
 
+        // --- UI ---
         function updateUI() {
             const S = getS();
             const n = getN();
@@ -420,10 +449,23 @@
             }
         }
 
+        // --- Создание счётчика ---
         function createCounter() {
             if (isCreated) return;
 
-            allCounters[myId] = { x: 0, online: true };
+            // Если это первый — становимся хостом
+            if (Object.keys(allCounters).length === 0) {
+                isHost = true;
+                roleBadge.textContent = '👑 ХОСТ';
+                roleBadge.className = 'role-badge host';
+                console.log('👑 Я ХОСТ!');
+            } else {
+                roleBadge.textContent = '👤 КЛИЕНТ';
+                roleBadge.className = 'role-badge client';
+                console.log('👤 Я КЛИЕНТ');
+            }
+
+            allCounters[myId] = { x: 0, online: true, lastSeen: Date.now() };
 
             isCreated = true;
             createBtn.disabled = true;
@@ -433,93 +475,172 @@
             xInput.disabled = false;
             plusBtns.forEach(btn => btn.disabled = false);
 
-            broadcastState();
+            // Если хост — начинаем синхронизацию
+            if (isHost) {
+                startHostSync();
+            } else {
+                // Клиент отправляет свои данные хосту
+                sendToHost({
+                    type: 'client_update',
+                    userId: myId,
+                    x: myX
+                });
+            }
+
             updateUI();
         }
 
-        function setX(newX) {
-            if (!isCreated) return;
-            if (newX < 0) newX = 0;
+        // --- Хост: синхронизация ---
+        function startHostSync() {
+            if (syncInterval) clearInterval(syncInterval);
+            
+            syncInterval = setInterval(() => {
+                // Проверяем таймауты
+                const now = Date.now();
+                for (const key in allCounters) {
+                    if (key !== myId && allCounters[key].online) {
+                        if (now - allCounters[key].lastSeen > TIMEOUT_MS) {
+                            console.log(`🗑️ Пользователь ${key} отключён (таймаут)`);
+                            delete allCounters[key];
+                            broadcastToAll({
+                                type: 'full_state',
+                                counters: allCounters
+                            });
+                            updateUI();
+                        }
+                    }
+                }
 
-            if (allCounters[myId]) {
-                allCounters[myId].x = newX;
-                myX = newX;
-                broadcastState();
-                updateUI();
-            }
+                // Рассылаем состояние всем
+                broadcastToAll({
+                    type: 'full_state',
+                    counters: allCounters
+                });
+            }, SYNC_INTERVAL);
         }
 
-        function resetCounter() {
-            if (!isCreated) return;
-            setX(0);
-        }
-
-        function broadcastState() {
-            const state = {
-                type: 'state',
-                counters: allCounters,
-                peers: Array.from(allPeers) // Передаём список всех пиров
-            };
+        // --- Хост: рассылка всем ---
+        function broadcastToAll(data) {
             connections.forEach(conn => {
                 if (conn.open) {
-                    conn.send(state);
+                    conn.send(data);
                 }
             });
         }
 
-        function receiveState(data) {
-            if (data.type === 'state') {
-                // Обновляем данные
-                for (const key in data.counters) {
-                    if (!allCounters[key]) {
-                        allCounters[key] = { x: 0, online: false };
-                    }
-                    allCounters[key].x = data.counters[key].x || 0;
-                    allCounters[key].online = data.counters[key].online !== false;
-                }
-
-                // Получаем список всех пиров
-                if (data.peers) {
-                    data.peers.forEach(peerId => {
-                        if (peerId !== myPeerId) {
-                            allPeers.add(peerId);
-                        }
-                    });
-                }
-
-                // Если наш счётчик ещё не создан, но появился в данных
-                if (allCounters[myId] && !isCreated) {
-                    isCreated = true;
-                    createBtn.disabled = true;
-                    createBtn.textContent = '✅ Счётчик создан';
-                    card.classList.remove('hidden');
-                    totalSBlock.classList.remove('hidden');
-                    xInput.disabled = false;
-                    plusBtns.forEach(btn => btn.disabled = false);
-                }
-
-                // Подключаемся ко всем новым пирам
-                setTimeout(connectToAllPeers, 300);
-
-                updateUI();
+        // --- Клиент: отправка хосту ---
+        function sendToHost(data) {
+            // Находим соединение с хостом
+            const hostConn = connections.find(c => c.peer === hostPeerId);
+            if (hostConn && hostConn.open) {
+                hostConn.send(data);
             }
         }
 
-        // --- Подключение ко ВСЕМ известным пирам ---
-        function connectToAllPeers() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const targetPeer = urlParams.get('connect');
-            
-            // Добавляем целевого пира из URL
-            if (targetPeer && targetPeer !== myPeerId) {
-                allPeers.add(targetPeer);
-            }
-
-            // Подключаемся к каждому пиру
-            allPeers.forEach(peerId => {
-                if (peerId !== myPeerId && !connections.some(c => c.peer === peerId)) {
-                    connectToPeer(peerId);
+        // --- Получение данных ---
+        function receiveData(data, senderPeerId) {
+            if (data.type === 'full_state') {
+                // Полное состояние от хоста
+                allCounters = data.counters || {};
+                // Обновляем lastSeen для себя
+                if (allCounters[myId]) {
+                    allCounters[myId].lastSeen = Date.now();
                 }
+                updateUI();
+            }
+            else if (data.type === 'client_update') {
+                // Обновление от клиента (только для хоста)
+                if (isHost) {
+                    const { userId, x } = data;
+                    if (allCounters[userId]) {
+                        allCounters[userId].x = x || 0;
+                        allCounters[userId].lastSeen = Date.now();
+                        allCounters[userId].online = true;
+                        updateUI();
+                    }
+                }
+            }
+            else if (data.type === 'client_join') {
+                // Новый клиент присоединился
+                if (isHost) {
+                    const { userId } = data;
+                    if (!allCounters[userId]) {
+                        allCounters[userId] = { x: 0, online: true, lastSeen: Date.now() };
+                        // Отправляем новому клиенту полное состояние
+                        const conn = connections.find(c => c.peer === senderPeerId);
+                        if (conn && conn.open) {
+                            conn.send({
+                                type: 'full_state',
+                                counters: allCounters
+                            });
+                        }
+                        // Рассылаем всем обновление
+                        broadcastToAll({
+                            type: 'full_state',
+                            counters: allCounters
+                        });
+                        updateUI();
+                    }
+                }
+            }
+        }
+
+        // --- Подключение ---
+        function setupConnection(conn) {
+            conn.on('open', () => {
+                connectionStatus.textContent = '🟢 Связано с ' + conn.peer.slice(0, 8);
+                connectionStatus.className = 'connection-status connected';
+                
+                // Если мы хост — отправляем полное состояние
+                if (isHost) {
+                    conn.send({
+                        type: 'full_state',
+                        counters: allCounters
+                    });
+                } else {
+                    // Если мы клиент — сообщаем хосту о себе
+                    conn.send({
+                        type: 'client_join',
+                        userId: myId
+                    });
+                    // Отправляем свои статы
+                    sendToHost({
+                        type: 'client_update',
+                        userId: myId,
+                        x: myX
+                    });
+                }
+                
+                updateUI();
+            });
+
+            conn.on('data', (data) => {
+                receiveData(data, conn.peer);
+            });
+
+            conn.on('close', () => {
+                connections = connections.filter(c => c !== conn);
+                connectionStatus.textContent = '🟡 Соединение потеряно';
+                connectionStatus.className = 'connection-status disconnected';
+                
+                // Если мы хост — удаляем отключившегося
+                if (isHost) {
+                    for (const key in allCounters) {
+                        if (key !== myId) {
+                            // Проверяем, есть ли соединение с этим пользователем
+                            const hasConnection = connections.some(c => c.peer === key);
+                            if (!hasConnection) {
+                                delete allCounters[key];
+                                broadcastToAll({
+                                    type: 'full_state',
+                                    counters: allCounters
+                                });
+                                updateUI();
+                            }
+                        }
+                    }
+                }
+                updateUI();
             });
         }
 
@@ -533,79 +654,6 @@
             connectionStatus.textContent = '🔄 Подключение к ' + peerId.slice(0, 8) + '...';
         }
 
-        function setupConnection(conn) {
-            conn.on('open', () => {
-                connectionStatus.textContent = '🟢 Связано с ' + conn.peer.slice(0, 8);
-                connectionStatus.className = 'connection-status connected';
-                
-                // Отправляем своё состояние
-                conn.send({
-                    type: 'state',
-                    counters: allCounters,
-                    peers: Array.from(allPeers)
-                });
-
-                // Добавляем в список
-                allPeers.add(conn.peer);
-
-                // Пробуем подключиться ко всем
-                setTimeout(connectToAllPeers, 300);
-                updateUI();
-            });
-
-            conn.on('data', (data) => {
-                receiveState(data);
-            });
-
-            conn.on('close', () => {
-                connections = connections.filter(c => c !== conn);
-                allPeers.delete(conn.peer);
-                connectionStatus.textContent = '🟡 Соединение потеряно';
-                connectionStatus.className = 'connection-status disconnected';
-                
-                // Проверяем, не удалился ли кто-то
-                checkAndRemoveOffline();
-                updateUI();
-            });
-        }
-
-        // --- Проверка и удаление офлайн пользователей ---
-        function checkAndRemoveOffline() {
-            // Проверяем всех, кто есть в allCounters
-            const activePeers = new Set();
-            connections.forEach(conn => {
-                if (conn.open) {
-                    activePeers.add(conn.peer);
-                }
-            });
-            // Добавляем себя
-            activePeers.add(myPeerId);
-
-            // Удаляем тех, кого нет в активных
-            for (const key in allCounters) {
-                // Пропускаем себя
-                if (key === myId) continue;
-                
-                // Проверяем, есть ли такой peer
-                let found = false;
-                for (const peerId of activePeers) {
-                    // Ищем соответствие между peerId и tabId
-                    // Так как у нас нет прямой связи, используем эвристику
-                    // Если пользователь не отвечает, удаляем его через некоторое время
-                }
-            }
-        }
-
-        // Периодическая проверка на офлайн
-        setInterval(() => {
-            // Проверяем соединения
-            const openConnections = connections.filter(c => c.open);
-            if (openConnections.length !== connections.length) {
-                connections = openConnections;
-                updateUI();
-            }
-        }, 5000);
-
         // --- PeerJS ---
         peer.on('open', (id) => {
             myPeerId = id;
@@ -615,17 +663,25 @@
             peerIdDisplay.textContent = '🆔 ' + id;
             peerIdDisplay.style.userSelect = 'text';
 
-            // Добавляем себя в список
-            allPeers.add(id);
-
-            // Подключаемся ко всем
-            setTimeout(connectToAllPeers, 500);
+            // Проверяем URL на наличие хоста
+            const urlParams = new URLSearchParams(window.location.search);
+            const connectTo = urlParams.get('connect');
+            
+            if (connectTo) {
+                hostPeerId = connectTo;
+                // Подключаемся к хосту
+                setTimeout(() => connectToPeer(connectTo), 500);
+            } else {
+                // Если нет параметра — становимся хостом при создании счётчика
+                roleBadge.textContent = '👑 ХОСТ (ожидание)';
+                roleBadge.className = 'role-badge host';
+                isHost = true;
+            }
         });
 
         peer.on('connection', (conn) => {
             if (!connections.some(c => c.peer === conn.peer)) {
                 connections.push(conn);
-                allPeers.add(conn.peer);
                 setupConnection(conn);
                 updateUI();
             }
@@ -649,6 +705,36 @@
             setX(val);
         });
 
+        function setX(newX) {
+            if (!isCreated) return;
+            if (newX < 0) newX = 0;
+
+            myX = newX;
+            
+            // Обновляем свои данные
+            if (allCounters[myId]) {
+                allCounters[myId].x = myX;
+                allCounters[myId].lastSeen = Date.now();
+            }
+
+            // Отправляем обновление хосту (если мы не хост)
+            if (!isHost && hostPeerId) {
+                sendToHost({
+                    type: 'client_update',
+                    userId: myId,
+                    x: myX
+                });
+            } else if (isHost) {
+                // Если мы хост — сразу рассылаем всем
+                broadcastToAll({
+                    type: 'full_state',
+                    counters: allCounters
+                });
+            }
+
+            updateUI();
+        }
+
         plusBtns.forEach(btn => {
             btn.addEventListener('click', () => {
                 if (!isCreated) return;
@@ -657,20 +743,34 @@
             });
         });
 
-        resetBtn.addEventListener('click', resetCounter);
-
-        // При закрытии вкладки удаляем себя
-        window.addEventListener('beforeunload', () => {
-            if (allCounters[myId]) {
-                delete allCounters[myId];
-                broadcastState();
-            }
+        resetBtn.addEventListener('click', () => {
+            if (!isCreated) return;
+            setX(0);
         });
 
-        console.log('📊 Многопользовательский онлайн-режим (Mesh-сеть)');
+        // При закрытии вкладки
+        window.addEventListener('beforeunload', () => {
+            if (isHost) {
+                // Хост удаляет всех
+                broadcastToAll({
+                    type: 'full_state',
+                    counters: {}
+                });
+            } else {
+                // Клиент сообщает хосту о выходе
+                sendToHost({
+                    type: 'client_leave',
+                    userId: myId
+                });
+            }
+            if (syncInterval) clearInterval(syncInterval);
+        });
+
+        console.log('📊 Клиент-серверная архитектура');
         console.log('  • Версия:', VERSION);
-        console.log('  • Каждый подключается ко всем остальным');
-        console.log('  • При закрытии вкладки пользователь удаляется');
+        console.log('  • Хост хранит все данные');
+        console.log('  • Синхронизация каждые 50 мс');
+        console.log('  • Таймаут 1000 мс');
     })();
 </script>
 </body>
