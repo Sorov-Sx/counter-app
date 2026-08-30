@@ -53,7 +53,7 @@
         .connection-status.connected { background:#d4edda; color:#155724; }
         .connection-status.disconnected { background:#f8d7da; color:#721c24; }
         .connection-status.trying { background:#fff3cd; color:#856404; }
-        .connection-status.fallback { background:#cce5ff; color:#004085; }
+        .connection-status.timeout { background:#ffe5cc; color:#8a4b00; }
         .version { text-align:center; font-size:0.55rem; color:#b0c7d5; padding:4px 0; letter-spacing:0.05em; }
         .peer-id-display { font-size:0.7rem; text-align:center; color:#3d5f72; background:#eef4f8; padding:6px 12px; border-radius:30px; font-family:monospace; word-break:break-all; user-select:text; cursor:text; }
         .bottom-info { display:flex; flex-direction:column; gap:6px; }
@@ -64,7 +64,7 @@
         .exit-btn:hover { background:#c82333; }
         .exit-btn:disabled { opacity:0.4; cursor:not-allowed; }
         .card .exit-btn { margin-top:12px; }
-        .server-info { font-size:0.5rem; color:#9aafbb; text-align:center; padding:2px 0; }
+        .server-info { font-size:0.5rem; color:#9aafbb; text-align:center; padding:2px 0; font-family:monospace; }
         @media (max-width:700px) { .main-layout { flex-direction:column; } .right-col { width:100%; max-height:150px; } .container { max-width:100%; } }
         @media (max-width:480px) { .container { max-width:100%; } .card { padding:16px 12px 12px; } .stat-value.price { font-size:1.3rem; } .stat-value input { width:60px; font-size:0.9rem; } .btn-group .plus-btn { font-size:0.85rem; padding:6px 0; } .total-s { font-size:0.75rem; } .create-btn { font-size:0.95rem; padding:12px 0; } .exit-btn { font-size:0.8rem; padding:6px 0; } .right-col { max-height:120px; } .user-list-item { font-size:0.5rem; } }
     </style>
@@ -105,13 +105,13 @@
     <div class="bottom-info">
         <div class="peer-id-display" id="peerIdDisplay">⏳ Получение Peer ID...</div>
         <div class="server-info" id="serverInfo">🔗 Сервер: ожидание...</div>
-        <div class="version" id="versionDisplay">v31</div>
+        <div class="version" id="versionDisplay">v32</div>
     </div>
 </div>
 
 <script>
 (function() {
-    const VERSION = 'v31';
+    const VERSION = 'v32';
     document.getElementById('versionDisplay').textContent = VERSION;
 
     let myPeerId = null;
@@ -127,10 +127,11 @@
     let peer = null;
     let currentServerIndex = 0;
     let isConnecting = false;
-    let serverStatuses = {};
+    let connectionTimeout = null;
+    let isPeerReady = false;
 
     // ==========================================
-    // СПИСОК СЕРВЕРОВ С ОПИСАНИЯМИ
+    // СПИСОК СЕРВЕРОВ
     // ==========================================
     const servers = [
         { 
@@ -161,39 +162,70 @@
         let text = '🔗 ';
         for (let i = 0; i < servers.length; i++) {
             const s = servers[i];
-            const isCurrent = (i === currentServerIndex);
             const statusEmoji = s.status === '✅ работает' ? '🟢' :
                                s.status === '❌ ошибка' ? '🔴' :
                                s.status === '⏳ попытка...' ? '🟡' : '⏳';
             text += `${statusEmoji} ${s.host}`;
-            if (isCurrent) text += ' ←';
             if (i < servers.length - 1) text += ' | ';
         }
         info.textContent = text;
     }
 
     function setServerStatus(index, status) {
-        servers[index].status = status;
-        updateServerInfo();
+        if (index < servers.length) {
+            servers[index].status = status;
+            updateServerInfo();
+        }
     }
 
     // ==========================================
-    // СОЗДАНИЕ PEER С ПЕРЕКЛЮЧЕНИЕМ
+    // СОЗДАНИЕ PEER С ТАЙМАУТОМ
     // ==========================================
     function createPeer(serverIndex) {
+        // Очищаем старый таймаут
+        if (connectionTimeout) {
+            clearTimeout(connectionTimeout);
+            connectionTimeout = null;
+        }
+
         if (peer) {
-            try { peer.destroy(); } catch(e) {}
+            try { 
+                peer.destroy(); 
+            } catch(e) {}
             peer = null;
         }
         
+        if (serverIndex >= servers.length) {
+            connectionStatus.textContent = '❌ Все серверы недоступны. Включите VPN.';
+            connectionStatus.className = 'connection-status disconnected';
+            isConnecting = false;
+            return null;
+        }
+
         const server = servers[serverIndex];
+        isPeerReady = false;
         setServerStatus(serverIndex, '⏳ попытка...');
-        connectionStatus.textContent = `🔄 Подключение к ${server.host}...`;
+        connectionStatus.textContent = `🔄 Попытка ${serverIndex+1}/${servers.length}: ${server.host}...`;
         connectionStatus.className = 'connection-status trying';
-        document.getElementById('serverInfo').textContent = `🔗 Сервер: ${server.host} (попытка ${serverIndex+1}/${servers.length})`;
+        document.getElementById('serverInfo').textContent = `🔗 ${server.host} (${serverIndex+1}/${servers.length})`;
         
         console.log(`🔗 Попытка ${serverIndex+1}/${servers.length}: ${server.host}`);
-        
+
+        // Таймаут: если через 8 секунд нет ответа — переключаемся
+        connectionTimeout = setTimeout(() => {
+            if (!isPeerReady) {
+                console.log(`⏰ Таймаут! ${server.host} не отвечает. Переключение...`);
+                connectionStatus.textContent = `⏰ Таймаут: ${server.host}`;
+                connectionStatus.className = 'connection-status timeout';
+                setServerStatus(serverIndex, '❌ ошибка (таймаут)');
+                currentServerIndex++;
+                isConnecting = false;
+                setTimeout(() => {
+                    createPeer(currentServerIndex);
+                }, 1000);
+            }
+        }, 8000);
+
         return new Peer(undefined, {
             host: server.host,
             port: server.port,
@@ -213,16 +245,10 @@
     function initPeer() {
         if (isConnecting) return;
         isConnecting = true;
-        
-        if (currentServerIndex >= servers.length) {
-            connectionStatus.textContent = '❌ Все серверы недоступны. Включите VPN.';
-            connectionStatus.className = 'connection-status disconnected';
-            isConnecting = false;
-            return;
-        }
-
         peer = createPeer(currentServerIndex);
-        setupPeerEvents();
+        if (peer) {
+            setupPeerEvents();
+        }
     }
 
     function nextServer() {
@@ -230,6 +256,11 @@
         currentServerIndex++;
         isConnecting = false;
         
+        if (connectionTimeout) {
+            clearTimeout(connectionTimeout);
+            connectionTimeout = null;
+        }
+
         if (currentServerIndex >= servers.length) {
             connectionStatus.textContent = '❌ Все серверы недоступны. Включите VPN.';
             connectionStatus.className = 'connection-status disconnected';
@@ -239,11 +270,18 @@
         
         setTimeout(() => {
             initPeer();
-        }, 1500);
+        }, 1000);
     }
 
     function setupPeerEvents() {
         peer.on('open', (id) => {
+            // Таймаут отменяем — сервер ответил
+            if (connectionTimeout) {
+                clearTimeout(connectionTimeout);
+                connectionTimeout = null;
+            }
+            
+            isPeerReady = true;
             isConnecting = false;
             myPeerId = id;
             setServerStatus(currentServerIndex, '✅ работает');
@@ -251,7 +289,7 @@
             connectionStatus.className = 'connection-status connected';
             peerIdDisplay.textContent = '🆔 ' + id;
             peerIdDisplay.style.userSelect = 'text';
-            document.getElementById('serverInfo').textContent = `🔗 Сервер: ${servers[currentServerIndex].host} ✅`;
+            document.getElementById('serverInfo').textContent = `🔗 ${servers[currentServerIndex].host} ✅`;
 
             const urlParams = new URLSearchParams(window.location.search);
             const connectTo = urlParams.get('connect');
@@ -278,6 +316,17 @@
         peer.on('error', (err) => {
             console.error('Peer error:', err);
             
+            // Если ошибка уже обработана таймаутом — игнорируем
+            if (!isConnecting && isPeerReady) {
+                // Если уже подключились, но ошибка позже
+                if (err.message.includes('unavailable') || err.message.includes('Could not connect')) {
+                    connectionStatus.textContent = '⚠️ ' + err.message.slice(0, 40);
+                    connectionStatus.className = 'connection-status disconnected';
+                }
+                return;
+            }
+
+            // Если ошибка во время подключения — пробуем следующий сервер
             if (err.message.includes('unavailable') || 
                 err.message.includes('Could not connect') ||
                 err.message.includes('timeout') ||
@@ -287,10 +336,15 @@
                 connectionStatus.textContent = `⚠️ ${err.message.slice(0, 40)}...`;
                 connectionStatus.className = 'connection-status disconnected';
                 
+                if (connectionTimeout) {
+                    clearTimeout(connectionTimeout);
+                    connectionTimeout = null;
+                }
+                
                 setTimeout(() => {
                     nextServer();
                 }, 1000);
-            } else if (!err.message.includes('unavailable') && !err.message.includes('Could not connect')) {
+            } else {
                 connectionStatus.textContent = '⚠️ ' + err.message.slice(0, 30);
                 connectionStatus.className = 'connection-status disconnected';
             }
@@ -298,7 +352,7 @@
     }
 
     // ==========================================
-    // ОСТАЛЬНАЯ ЛОГИКА
+    // ОСТАЛЬНАЯ ЛОГИКА (без изменений)
     // ==========================================
     const createBtn = document.getElementById('createBtn');
     const card = document.getElementById('card');
@@ -516,7 +570,8 @@
     initPeer();
 
     console.log('📊 Версия:', VERSION);
-    console.log('🔄 Автоматическая смена сервера с отображением статусов');
+    console.log('⏰ Таймаут 8 секунд на каждый сервер');
+    console.log('🔄 Автоматическая смена при таймауте или ошибке');
 })();
 </script>
 </body>
